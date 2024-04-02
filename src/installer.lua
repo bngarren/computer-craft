@@ -1,4 +1,39 @@
--- github_installer.lua
+--[[
+    GitHub Repository Script Installer for ComputerCraft
+    Author: Ben Garren
+    Repository URL: https://github.com/bngarren/computer-craft
+    Last Updated: 04/02/2024
+
+    Purpose:
+    This script automates the process of installing Lua scripts from my GitHub repository into ComputerCraft computers. 
+    It supports automatic dependency resolution via .deps files, ensuring all required scripts are downloaded and available for execution.
+
+    Arguments:
+    - <programName>: The name of the main Lua script to be installed from the repository. This script name doesn't have to include the .lua extension, as it is appended automatically.
+    - [optionalFileName]: Optionally, a second argument can specify the local filename under which the downloaded script will be saved. If omitted, the script saves as <programName>.lua.
+
+    Dependencies Handling:
+    Each Lua script that requires other scripts to function must have an associated .deps file with the same name as the main script. 
+    For example, if `scriptX.lua` is the main script, it should have a `scriptX.deps` file in the same directory in the repository.
+    The .deps file contains a list of filenames, each representing a dependency. These files are then downloaded automatically by the installer.
+
+    Usage Example:
+    Assuming `installer.lua` is saved on a ComputerCraft computer, run it with:
+        `installer <programName> [optionalFileName]`
+    For instance:
+        `installer myScript`
+
+    This will download `myScript.lua` and its dependencies as defined in `myScript.deps`, prepare `startup.lua` to run `myScript.lua` on boot, and handle user confirmation for overwrites.
+]]
+
+-- Function to write text in a specified color and then reset to the default color
+function coloredWrite(text, color)
+    local defaultColor = term.getTextColor()  -- Save the current text color
+    term.setTextColor(color)                  -- Set the new text color
+    write(text)                               -- Write the text
+    term.setTextColor(defaultColor)           -- Reset the text color back to default
+end
+
 local args = { ... }
 local scriptName = args[1] -- Path to the script within the GitHub repository.
 
@@ -24,10 +59,10 @@ local filename = args[2] or scriptName
 
 -- Check if the file already exists and ask for confirmation to overwrite.
 if fs.exists(filename) then
-    write(filename .. " already exists. Overwrite? [y/N]: ")
+    coloredWrite(filename .. " already exists. Overwrite? [y/N]: ", colors.orange)
     local input = read()
     if input:lower() ~= 'y' then
-        print("Installation cancelled.")
+        coloredWrite("Installation cancelled.", colors.red)
         return
     else
         fs.delete(filename)
@@ -45,7 +80,7 @@ end
 -- Download the main script
 local success = downloadFile(scriptURL, filename)
 if not success then
-    print("Failed to download " .. scriptName)
+    coloredWrite("Failed to download " .. scriptName, colors.red)
     return
 end
 
@@ -58,7 +93,7 @@ if downloadFile(depsURL, "temp.deps") then
     while line do
         print("Downloading dependency: " .. line)
         if not downloadFile(baseURL .. line, line) then
-            print("Failed to download dependency: " .. line)
+            coloredWrite("Failed to download dependency: " .. line, colors.red)
             deps.close()
             return
         end
@@ -72,7 +107,7 @@ end
 
 
 -- Ask the user if they want to update startup.lua to run the new file.
-print("Do you want to update startup.lua to only run this file on boot? [y/N]: ")
+coloredWrite("Do you want to update startup.lua to only run this file on boot? [y/N]: ", colors.orange)
 local updateStartup = read()
 if updateStartup:lower() == 'y' then
     -- Create or overwrite startup.lua
@@ -86,4 +121,4 @@ else
     print("Startup script not modified.")
 end
 
-print("Installation complete.")
+coloredWrite("Installation complete.", colors.green)
