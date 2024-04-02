@@ -126,24 +126,17 @@ local function run()
 
     -- GUI
     local monitorFrame
+    local mainGuiFrame, pausedFrame
     local energyMonitorLabels = {}
 
     monitor.setTextScale(0.5)
     monitorFrame = basalt.addMonitor():setMonitor(peripheral.getName(monitor))
 
-    monitorFrame
-        :setBackground(colors.black)
-
-    local titleLabel = monitorFrame
-        :addLabel()
-        :setText("Energy Monitors")
-        :setPosition(1, 1)
-        :setSize("parent.w", 1)
-        :setBackground(colors.black)
-        :setForeground(colors.blue)
+    mainGuiFrame = monitorFrame:createFrame()
+    pausedFrame = monitorFrame:createFrame()
 
     local function addMonitorLabel(name, data, yPos, textColor)
-        local label = monitorFrame:addLabel()
+        local label = mainGuiFrame:addLabel()
             :setText(name .. ": " .. tostring(data.rate) .. " FE/t")
             :setPosition(1, yPos)
             :setSize("parent.w", 1)
@@ -155,27 +148,43 @@ local function run()
     end
 
     local function updateGui()
+        mainGuiFrame
+            :setBackground(colors.black)
+
+        mainGuiFrame
+            :addLabel()
+            :setText("Energy Monitors")
+            :setPosition(1, 1)
+            :setSize("parent.w", 1)
+            :setBackground(colors.black)
+            :setForeground(colors.blue)
+
+        pausedFrame
+            :setBackground(colors.gray)
+        pausedFrame
+            :addLabel()
+            :setText("OFFLINE")
+            :setForeground(colors.red)
+            :setTextAlign("right")
+        pausedFrame:hide()
+
         while true do
             if not shouldUpdate then
-                monitorFrame:removeChildren()
-                monitorFrame
-                    :addLabel()
-                    :setText("OFFLINE")
-                    :setForeground(colors.red)
-                    :setTextAlign("right")
+                pausedFrame:show()
             else
+                pausedFrame:hide()
                 -- Remove existing labels
                 for _, label in ipairs(energyMonitorLabels) do
                     label:remove()
                 end
                 energyMonitorLabels = {} -- Reset the table for the next iteration
 
-                local yPos = 3       -- Start position for the first monitor label
+                local yPos = 3           -- Start position for the first monitor label
                 local totalProducerRate = 0
                 local totalConsumerRate = 0
 
                 -- Heading for Producers
-                local producerHeading = monitorFrame:addLabel()
+                local producerHeading = mainGuiFrame:addLabel()
                     :setText("Producers")
                     :setPosition(1, yPos)
                     :setSize("parent.w", 1)
@@ -193,7 +202,7 @@ local function run()
                 end
 
                 -- Total for Producers
-                local producerTotalLabel = monitorFrame:addLabel()
+                local producerTotalLabel = mainGuiFrame:addLabel()
                     :setText("Total: " .. tostring(totalProducerRate) .. " FE/t")
                     :setPosition(1, yPos)
                     :setSize("parent.w", 1)
@@ -205,7 +214,7 @@ local function run()
 
 
                 -- Heading for Consumers
-                local consumerHeading = monitorFrame:addLabel()
+                local consumerHeading = mainGuiFrame:addLabel()
                     :setText("Consumers")
                     :setPosition(1, yPos)
                     :setSize("parent.w", 1)
@@ -223,7 +232,7 @@ local function run()
                 end
 
                 -- Total for Consumers
-                local consumerTotalLabel = monitorFrame:addLabel()
+                local consumerTotalLabel = mainGuiFrame:addLabel()
                     :setText("Total: " .. tostring(totalConsumerRate) .. " FE/t")
                     :setPosition(1, yPos)
                     :setSize("parent.w", 1)
