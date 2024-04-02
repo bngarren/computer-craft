@@ -45,11 +45,11 @@ end
 local utilFile = "util.lua"
 if fs.exists(utilFile) then
     fs.delete(utilFile)
-    local success = shell.run("wget", baseURL .. "util.lua", filename)
-    if not success then
-        print("Failed to download " .. "util.lua")
-        return
-    end
+end
+local success = shell.run("wget", baseURL .. utilFile, filename)
+if not success then
+    print("Failed to download " .. utilFile)
+    return
 end
 
 
