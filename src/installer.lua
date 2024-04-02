@@ -1,6 +1,6 @@
 -- github_installer.lua
-local args = {...}
-local scriptName = args[1]  -- Path to the script within the GitHub repository.
+local args = { ... }
+local scriptName = args[1] -- Path to the script within the GitHub repository.
 
 if not scriptName or scriptName == "" then
     print("Usage: installer <programName>")
@@ -9,6 +9,11 @@ end
 
 -- Define the base URL for raw user content on GitHub.
 local baseURL = "https://raw.githubusercontent.com/bngarren/computer-craft/master/src/"
+
+-- Check if the scriptName ends with '.lua', append if not
+if not scriptName:match("%.lua$") then
+    scriptName = scriptName .. ".lua"
+end
 
 -- Construct the full URL to the script.
 local scriptURL = baseURL .. scriptName
@@ -24,6 +29,8 @@ if fs.exists(filename) then
     if input:lower() ~= 'y' then
         print("Installation cancelled.")
         return
+    else
+        fs.delete(filename)
     end
 end
 
@@ -33,6 +40,18 @@ if not success then
     print("Failed to download " .. scriptName)
     return
 end
+
+-- Download the util script from GitHub.
+local utilFile = "util.lua"
+if fs.exists(utilFile) then
+    fs.delete(utilFile)
+    local success = shell.run("wget", baseURL .. "util.lua", filename)
+    if not success then
+        print("Failed to download " .. "util.lua")
+        return
+    end
+end
+
 
 -- Ask the user if they want to update startup.lua to run the new file.
 print("Do you want to update startup.lua to only run this file on boot? [y/N]: ")
@@ -50,5 +69,3 @@ else
 end
 
 print("Installation complete.")
-
-
