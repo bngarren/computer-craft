@@ -114,6 +114,7 @@ local function run()
 
     -- Initial peripherals check
     if not checkPeripherals() then
+        printError("Couldn't start")
         return
     end
 
@@ -132,8 +133,10 @@ local function run()
     monitor.setTextScale(0.5)
     monitorFrame = basalt.addMonitor():setMonitor(peripheral.getName(monitor))
 
-    mainGuiFrame = monitorFrame:createFrame()
-    pausedFrame = monitorFrame:createFrame()
+    local monitorX, monitorY = monitorFrame.getSize()
+
+    mainGuiFrame = monitorFrame:addFrame():setSize(monitorX, monitorY)
+    pausedFrame = monitorFrame:addFrame():setSize(monitorX, monitorY):hide()
 
     local function addMonitorLabel(name, data, yPos, textColor)
         local label = mainGuiFrame:addLabel()
@@ -166,7 +169,6 @@ local function run()
             :setText("OFFLINE")
             :setForeground(colors.red)
             :setTextAlign("right")
-        pausedFrame:hide()
 
         while true do
             if not shouldUpdate then

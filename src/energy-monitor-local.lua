@@ -9,12 +9,12 @@ local function listenForData()
         -- Now `data` is a table, so you can access its contents
         if not data then
             basalt.debug("Could not deserialize data")
-            return
         end
         if not data.type then
             basalt.debug("Received data is missing type")
-            return
         end
+
+        -- Process received data here...
     end
 end
 
@@ -138,24 +138,36 @@ local function run()
 
     local master
     local function findMaster()
-        master = rednet.lookup("energy-monitor", "master")
-        if master then
-            print("Found 'master' on computer #" .. master)
-        else
-            printError("Cannot find 'master' on network")
+        local attempt = 0
+        local maxAttempts = 5
+        while attempt < maxAttempts do
+            master = rednet.lookup("energy-monitor", "master")
+            if master then
+                print("Found 'master' on computer #" .. master)
+                return master
+            else
+                attempt = attempt + 1
+                print("Retrying to find 'master'... Attempt " .. attempt)
+                sleep(2) -- Wait a bit before retrying
+            end
         end
-        return master or nil
+        printError("Cannot find 'master' on network after " .. maxAttempts .. " attempts.")
     end
 
     local function updateMaster()
         while true do
             if shouldUpdate then
-                if not master then
+                if not master or not rednet.isOpen(peripheral.getName(modem)) then
                     findMaster()
                 end
-
-                local rate = energyMeter.getTransferRate()
-                sendEnergyRate(master, rate)
+                if master then
+                    local rate = energyMeter.getTransferRate()
+                    sendEnergyRate(master, rate)
+                else
+                    print("Master not found. Skipping update.")
+                end
+            else
+                print("Peripherals not ready. Skipping update.")
             end
             sleep(5)
         end
