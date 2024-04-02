@@ -110,7 +110,6 @@ local function run()
     rednet.host("energy-monitor", os.getComputerLabel())
 
     -- GUI
-    local main = basalt.createFrame()
     local monitorFrame
     local energyMonitorLabels = {}
 
@@ -217,13 +216,13 @@ local function run()
     local peripheralPollingThread = monitorFrame:addThread()
     peripheralPollingThread:start(pollPeripherals)
 
-    local incomingThread = main:addThread()
+    local incomingThread = monitorFrame:addThread()
     incomingThread:start(listenForData)
 
-    local refreshLocalEnergyMonitorsThread = main:addThread()
+    local refreshLocalEnergyMonitorsThread = monitorFrame:addThread()
     refreshLocalEnergyMonitorsThread:start(refreshLocalEnergyMonitors)
 
-    local updateGuiThread = main:addThread()
+    local updateGuiThread = monitorFrame:addThread()
     updateGuiThread:start(updateGui)
 
     basalt.autoUpdate()
