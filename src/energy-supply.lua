@@ -13,6 +13,9 @@ local basalt = util.ensureModuleExists("basalt", function(...)
 end
 )
 
+-- Clear term
+term.clear()
+
 local function isEnergyStorage(peripheralName)
     local methods = peripheral.getMethods(peripheralName) or {}
 

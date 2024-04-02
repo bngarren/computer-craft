@@ -26,6 +26,10 @@
     This will download `myScript.lua` and its dependencies as defined in `myScript.deps`, prepare `startup.lua` to run `myScript.lua` on boot, and handle user confirmation for overwrites.
 ]]
 
+local programs = {
+    {name = "Energy Supply", path = "energy-supply.lua"},
+}
+
 -- Function to write text in a specified color and then reset to the default color
 local function coloredWrite(text, color)
     local defaultColor = term.getTextColor()  -- Save the current text color
@@ -34,12 +38,36 @@ local function coloredWrite(text, color)
     term.setTextColor(defaultColor)           -- Reset the text color back to default
 end
 
-local args = { ... }
-local scriptName = args[1] -- Path to the script within the GitHub repository.
+-- Function to display a menu and allow the user to select a program
+local function selectProgram()
+    print("Available programs:")
+    for i, program in ipairs(programs) do
+        print(i .. ") " .. program.name)
+    end
+    coloredWrite("Select a program to install: ", colors.orange)
+    print("\n")
+    local input = read()
+    local selection = tonumber(input)
+    if selection and selection >= 1 and selection <= #programs then
+        return programs[selection].path
+    else
+        print("Invalid selection.")
+        return nil
+    end
+end
 
-if not scriptName or scriptName == "" then
-    print("Usage: installer <programName>")
-    return
+local args = { ... }
+local scriptName
+
+if #args == 0 then
+    -- No arguments provided, show selection menu
+    scriptName = selectProgram()
+    if not scriptName then
+        return -- Exit if no valid selection is made
+    end
+else
+    -- Use the provided argument
+    scriptName = args[1]
 end
 
 -- Define the base URL for raw user content on GitHub.
