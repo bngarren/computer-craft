@@ -36,7 +36,7 @@ local function refreshLocalEnergyMonitors()
             end
         end
 
-        util.coloredWrite("Tracking " .. numberOfMonitors .. " local energy monitors.", colors.lightGray)
+        util.coloredWrite("Tracking " .. numberOfMonitors .. " local energy monitors.\n", colors.lightGray)
         -- logToFile(textutils.serialize(localEnergyMonitors) .. " - " .. os.time())
         sleep(5)
     end
@@ -157,10 +157,12 @@ local function run()
     local function updateGui()
         while true do
             if not shouldUpdate then
+                monitorFrame:removeChildren()
                 monitorFrame
                     :addLabel()
                     :setText("OFFLINE")
                     :setForeground(colors.red)
+                    :setTextAlign("right")
             else
                 -- Remove existing labels
                 for _, label in ipairs(energyMonitorLabels) do

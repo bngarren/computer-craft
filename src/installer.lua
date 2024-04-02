@@ -42,7 +42,7 @@ end
 
 -- Function to display a menu and allow the user to select a program
 local function selectProgram()
-    coloredWrite("Available programs:", colors.lime)
+    coloredWrite("Available programs:\n", colors.lime)
     for i, program in ipairs(programs) do
         print(i .. "  ) " .. program.name)
     end
