@@ -53,7 +53,7 @@ end
 
 function util.findWirelessModem()
     local m = peripheral.find("modem", function(name, modem)
-        if m.isWireless() then
+        if modem.isWireless() then
             return m
         else
             printError("Modem is present, but wireless modem is required.")
