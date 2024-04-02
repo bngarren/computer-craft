@@ -105,7 +105,7 @@ local function downloadFile(fileURL, filename)
     if fs.exists(filename) then
         fs.delete(filename)
     end
-    return shell.run("wget", fileURL, filename)
+    return shell.run("wget", "--no-cache", fileURL, filename)
 end
 
 -- Download the main script

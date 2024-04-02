@@ -51,6 +51,9 @@ function util.checkSpecifiedPeripherals(peripheralsList)
     return allFound
 end
 
+--[[
+    Finds (and wraps) a _wireless_ modem if present and returns it, otherwise returns nil
+]]
 function util.findWirelessModem()
     local m = peripheral.find("modem", function(name, modem)
         if modem.isWireless() then
