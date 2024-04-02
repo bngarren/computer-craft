@@ -56,13 +56,9 @@ end
 ]]
 function util.findWirelessModem()
     local m = peripheral.find("modem", function(name, modem)
-        if modem.isWireless() then
-            return m
-        else
-            printError("Modem is present, but wireless modem is required.")
-            return nil
-        end
+        return modem.isWireless()
     end)
+    return m or nil
 end
 
 function util.centerText(mon, text, yVal)
