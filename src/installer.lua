@@ -34,24 +34,40 @@ if fs.exists(filename) then
     end
 end
 
--- Download the script from GitHub.
-local success = shell.run("wget", scriptURL, filename)
+-- Function to download and overwrite a file
+local function downloadFile(fileURL, filename)
+    if fs.exists(filename) then
+        fs.delete(filename)
+    end
+    return shell.run("wget", fileURL, filename)
+end
+
+-- Download the main script
+local success = downloadFile(scriptURL, filename)
 if not success then
     print("Failed to download " .. scriptName)
     return
 end
 
--- Download the util script from GitHub.
-local utilFile = "util.lua"
-if fs.exists(utilFile) then
-    fs.delete(utilFile)
-end
-local success2 = shell.run("wget", baseURL .. utilFile, utilFile)
-if not success2 then
-    print("Failed to download " .. utilFile)
-    return
-else 
-    print("Downloaded updated " .. utilFile)
+-- Check for a .deps file and download dependencies
+local depsFile = scriptName:gsub("%.lua$", ".deps")
+local depsURL = baseURL .. depsFile
+if downloadFile(depsURL, "temp.deps") then
+    local deps = fs.open("temp.deps", "r")
+    local line = deps.readLine()
+    while line do
+        print("Downloading dependency: " .. line)
+        if not downloadFile(baseURL .. line, line) then
+            print("Failed to download dependency: " .. line)
+            deps.close()
+            return
+        end
+        line = deps.readLine()
+    end
+    deps.close()
+    fs.delete("temp.deps")
+else
+    print("No dependencies file found or failed to download.")
 end
 
 
