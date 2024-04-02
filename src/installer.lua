@@ -8,7 +8,7 @@ if not scriptName or scriptName == "" then
 end
 
 -- Define the base URL for raw user content on GitHub.
-local baseURL = "https://github.com/bngarren/computer-craft.git/master/src"
+local baseURL = "https://https://raw.githubusercontent.com/bngarren/computer-craft/master/src/"
 
 -- Construct the full URL to the script.
 local scriptURL = baseURL .. scriptName
