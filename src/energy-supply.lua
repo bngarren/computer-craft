@@ -9,7 +9,7 @@ local util = require("util")
 
 local basalt = util.ensureModuleExists("basalt", function(...)
     -- Command to download from Pastebin
-    shell.run("wget", "run", "https://basalt.madefor.cc/install.lua", "release", "latest.lua", ...)
+    return shell.run("wget", "run", "https://basalt.madefor.cc/install.lua", "release", "latest.lua", ...)
 end
 )
 

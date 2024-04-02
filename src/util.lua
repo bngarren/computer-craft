@@ -10,9 +10,11 @@ function util.ensureModuleExists(moduleName, action)
             local success = action(moduleName)
             if success then
                 return require(moduleName)
+            else
+                print("Module '" .. moduleName .. "' not found. Failed attempt to retrieve.")
             end
         end
-        print("Module '" .. moduleName .. "' not found. Consider re-running installer and ensure .deps file includes " ..moduleName)
+        print("Module '" .. moduleName .. "' not found. Ensure .deps file includes " ..moduleName.." and re-run installer.")
     else
         return require(moduleName)
     end
