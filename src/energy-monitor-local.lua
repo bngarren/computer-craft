@@ -49,17 +49,18 @@ local function run()
     -- Identify energy meter (required)
     local meters = { peripheral.find("energymeter") }
     if #meters == 0 then
-        error("Missing Energy Meter!")
+        printError("Missing Energy Meter")
+        return
     else
         energyMeter = meters[1] -- pick the first
         print("Using Energy Meter on side: " .. peripheral.getName(energyMeter))
-        textutils.tabulate(peripheral.getMethods(peripheral.getName(energyMeter)))
-        print(energyMeter.getStatus())
+        -- textutils.tabulate(peripheral.getMethods(peripheral.getName(energyMeter)))
     end
 
     -- Ensure Energy Meter is configured correctly
     if not energyMeter.hasInput() or not energyMeter.hasOutput() or energyMeter.getStatus() == "DISCONNECTED" then
-        error("Energy Meter is not properly configured!")
+        printError("Energy Meter is not properly configured!")
+        return
     end
 
     -- Ensure computer is labeled

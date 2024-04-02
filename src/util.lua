@@ -20,6 +20,33 @@ function util.ensureModuleExists(moduleName, action)
     end
 end
 
+-- Function to check and wrap specified peripherals
+-- `peripheralsList` is a table where keys are the expected peripheral types
+-- or custom functions, and values are variables to store the wrapped peripheral or nil if not found.
+function util.checkSpecifiedPeripherals(peripheralsList)
+    local allFound = true
+    for identifier, storageVar in pairs(peripheralsList) do
+        local foundPeripheral = nil
+
+        -- If the identifier is a function, call it to find the peripheral
+        if type(identifier) == "function" then
+            foundPeripheral = identifier()
+        else
+            -- Otherwise, use peripheral.find with the type string
+            foundPeripheral = peripheral.find(identifier)
+        end
+
+        if foundPeripheral then
+            _G[storageVar] = foundPeripheral  -- Store the wrapped peripheral in the specified global variable
+        else
+            print("Missing required peripheral for: " .. storageVar)
+            _G[storageVar] = nil  -- Ensure the global variable is nil if the peripheral is not found
+            allFound = false
+        end
+    end
+    return allFound
+end
+
 function util.centerText(mon, text, yVal)
     local length = string.len(text)
     local monX, _ = mon.getSize() -- Get the width and ignore the height

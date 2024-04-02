@@ -36,6 +36,18 @@ local function isEnergyStorage(peripheralName)
     return true
 end
 
+-- Custom function to find and validate an energy storage peripheral
+local function findEnergyStorage()
+    -- Example logic to find and validate an energy storage peripheral
+    local peripheralNames = peripheral.getNames()
+    for _, name in ipairs(peripheralNames) do
+        if isEnergyStorage(name) then  -- Assuming isEnergyStorage is a predefined function
+            return peripheral.wrap(name)
+        end
+    end
+    return nil  -- Return nil if no valid energy storage peripheral is found
+end
+
 
 local function formatNumber(num)
     if num >= 1e12 then
@@ -103,42 +115,29 @@ local function getEnergyChange(oldEnergy, newEnergy)
 end
 
 local modem, monitor, energyStorage
+local requiredPeripherals = {
+    ["modem"] = "modem",                  -- Expecting a modem, will store in global `modem` variable
+    ["monitor"] = "monitor",              -- Expecting a monitor, will store in global `monitor` variable
+    [findEnergyStorage] = "energyStorage" -- Using custom function for energyStorage
+}
 local shouldUpdate = false
 
 local function checkPeripherals()
-    local checkModem = nil
-    local checkMonitor = nil
-    local checkEnergyStorage = nil
+    -- Use the utility function to check for and wrap required peripherals
+    local peripheralsReady = util.checkSpecifiedPeripherals(requiredPeripherals)
 
-    print("Checking peripherals...")
-    checkModem = peripheral.find("modem")
-    checkMonitor = peripheral.find("monitor")
-
-    local peripheralNames = peripheral.getNames()
-    for _, name in ipairs(peripheralNames) do
-        -- print(name)
-        if isEnergyStorage(name) then
-            checkEnergyStorage = peripheral.wrap(name)
-        end
-    end
-
-    local currentStatus = checkModem ~= nil and checkMonitor ~= nil and checkEnergyStorage ~= nil
-
-    -- Only print messages if the status changed
-    if currentStatus then
-        print("All essential peripherals are present. Resuming updates.")
+    if peripheralsReady then
+        print("All required peripherals are present. Proceeding with operations...")
         shouldUpdate = true
-        modem = checkModem
-        monitor = checkMonitor
-        energyStorage = checkEnergyStorage
+        return true
     else
-        print("Missing essential peripherals. Updates paused.")
+        print("One or more required peripherals are missing. Aborting operations.")
         shouldUpdate = false
         if monitor then
             monitor.clear()
         end
+        return false
     end
-    return currentStatus
 end
 
 local function pollPeripherals()
