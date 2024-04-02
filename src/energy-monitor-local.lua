@@ -118,8 +118,7 @@ local function run()
     if not typeSetting then
         local isValid = false
         while not isValid do
-            util.coloredWrite("Choose the type: 1) Producer 2) Consumer", colors.orange)
-            print("\n")
+            util.coloredWrite("Choose the type:\n 1) Producer\n 2) Consumer\n", colors.orange)
             local input = read()
             if input == "1" then
                 typeSetting = "Producer"
@@ -141,7 +140,7 @@ local function run()
     local master
     local function findMaster()
         local attempt = 0
-        local maxAttempts = 5
+        local maxAttempts = 2
         while attempt < maxAttempts do
             master = rednet.lookup("energy-monitor", "master")
             if master then
@@ -149,8 +148,8 @@ local function run()
                 return master
             else
                 attempt = attempt + 1
-                print("Retrying to find 'master'... Attempt " .. attempt)
-                sleep(2) -- Wait a bit before retrying
+                util.coloredWrite("Retrying to find 'master'... Attempt " .. attempt.."\n", colors.yellow)
+                sleep(0.5) -- Wait a bit before retrying
             end
         end
         printError("Cannot find 'master' on network after " .. maxAttempts .. " attempts.")
@@ -179,14 +178,14 @@ local function run()
                 if rate then -- Ensure rate is not nil before attempting to send
                     sendEnergyRate(master, rate)
                 else
-                    print("Failed to obtain energy transfer rate.")
+                    util.coloredWrite("Failed to obtain energy transfer rate. Couldn't send data.\n", colors.yellow)
                 end
             else
                 if not shouldUpdate then
-                    print("Updates are paused. Skipping data send.")
+                    util.coloredWrite("Updates are paused. Skipping data send.\n", colors.yellow)
                 end
                 if not master then
-                    print("Master not defined. Skipping data send.")
+                    util.coloredWrite("Master not defined. Skipping data send.\n", colors.yellow)
                 end
             end
             sleep(2)

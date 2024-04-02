@@ -59,7 +59,7 @@ local function listenForData()
 
         if data.type == "energyRate" then
             -- Process the data
-            print("Received 'energyRate' from #" .. senderId .. " (" .. data.name .. ") with payload: " .. data.payload)
+            -- print("Received 'energyRate' from #" .. senderId .. " (" .. data.name .. ") with payload: " .. data.payload)
             localEnergyMonitors[data.name] = {
                 energyType = data.energyType,
                 rate = data.payload,
@@ -87,14 +87,13 @@ local function checkPeripherals()
 
         --ensure modem is open for rednet and on protocol
         if not rednet.isOpen(peripheral.getName(modem)) then
-            -- Identify network and master computer
             rednet.open(peripheral.getName(modem))
             rednet.host("energy-monitor", os.getComputerLabel())
             util.coloredWrite("Modem opened for communication.\n", colors.cyan)
         end
         return true
     else
-        print("One or more required peripherals are missing. Paused operations.")
+        util.coloredWrite("One or more required peripherals are missing. Paused operations.\n", colors.yellow)
         if monitor then
             monitor.clear()
         end
@@ -248,8 +247,6 @@ local function run()
                     :setForeground(colors.red)
                 table.insert(energyMonitorLabels, consumerTotalLabel)
             end
-
-
 
             sleep(2) -- Refresh the GUI every 5 seconds
         end

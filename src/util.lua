@@ -2,6 +2,15 @@ local util = {}
 
 util.sides = {"left", "right", "top", "bottom", "front", "back"}
 
+-- Function to write text in a specified color and then reset to the default color
+function util.coloredWrite(text, color)
+    if not term then return end
+    local defaultColor = term.getTextColor()  -- Save the current text color
+    term.setTextColor(color)                  -- Set the new text color
+    write(text)                               -- Write the text
+    term.setTextColor(defaultColor)           -- Reset the text color back to default
+end
+
 function util.ensureModuleExists(moduleName, action)
     local filePath = moduleName .. ".lua"
 
@@ -43,7 +52,7 @@ function util.checkSpecifiedPeripherals(peripheralsList)
         if foundPeripheral then
             _G[storageVar] = foundPeripheral  -- Store the wrapped peripheral in the specified global variable
         else
-            print("Missing required peripheral for: " .. storageVar)
+            util.coloredWrite("Missing required peripheral for: " .. storageVar, colors.yellow)
             _G[storageVar] = nil  -- Ensure the global variable is nil if the peripheral is not found
             allFound = false
         end
@@ -80,15 +89,6 @@ function util.openModem()
     end
     print("No modem found.")
     return false
-end
-
--- Function to write text in a specified color and then reset to the default color
-function util.coloredWrite(text, color)
-    if not term then return end
-    local defaultColor = term.getTextColor()  -- Save the current text color
-    term.setTextColor(color)                  -- Set the new text color
-    write(text)                               -- Write the text
-    term.setTextColor(defaultColor)           -- Reset the text color back to default
 end
 
 function util.tableContains(table, element)
