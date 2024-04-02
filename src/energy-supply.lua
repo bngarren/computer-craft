@@ -114,7 +114,7 @@ local function getEnergyChange(oldEnergy, newEnergy)
     end
 end
 
-local modem, monitor, energyStorage
+-- local modem, monitor, energyStorage
 local requiredPeripherals = {
     ["modem"] = "modem",                  -- Expecting a modem, will store in global `modem` variable
     ["monitor"] = "monitor",              -- Expecting a monitor, will store in global `monitor` variable
@@ -123,6 +123,7 @@ local requiredPeripherals = {
 local shouldUpdate = false
 
 local function checkPeripherals()
+    print("Checking peripherals")
     -- Use the utility function to check for and wrap required peripherals
     local peripheralsReady = util.checkSpecifiedPeripherals(requiredPeripherals)
 

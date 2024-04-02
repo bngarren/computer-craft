@@ -20,9 +20,13 @@ function util.ensureModuleExists(moduleName, action)
     end
 end
 
--- Function to check and wrap specified peripherals
--- `peripheralsList` is a table where keys are the expected peripheral types
--- or custom functions, and values are variables to store the wrapped peripheral or nil if not found.
+--[[
+Function to check and wrap specified peripherals
+
+`peripheralsList` is a table where keys are the expected peripheral types or custom functions, and values are variables to store the wrapped peripheral or nil if not found.
+
+Example: a key of 'monitor' will automatically find (and wrap) the first monitor it finds. A custom function should return the wrapped peripheral.
+]]
 function util.checkSpecifiedPeripherals(peripheralsList)
     local allFound = true
     for identifier, storageVar in pairs(peripheralsList) do
@@ -45,6 +49,12 @@ function util.checkSpecifiedPeripherals(peripheralsList)
         end
     end
     return allFound
+end
+
+function util.findWirelessModem()
+    local m = peripheral.find("modem", function(name, modem)
+        return modem.isWireless() or nil
+    end)
 end
 
 function util.centerText(mon, text, yVal)

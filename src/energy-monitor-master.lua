@@ -65,28 +65,41 @@ local function listenForData()
     end
 end
 
+local requiredPeripherals = {
+    [util.findWirelessModem] = "modem",     -- Expecting a modem, will store in global `modem` variable
+    ["monitor"] = "monitor", -- Expecting a monitor, will store in global `monitor` variable
+}
+
+local function checkPeripherals()
+    print("Checking peripherals")
+    -- Use the utility function to check for and wrap required peripherals
+    local peripheralsReady = util.checkSpecifiedPeripherals(requiredPeripherals)
+
+    if peripheralsReady then
+        print("All required peripherals are present. Proceeding with operations...")
+        return true
+    else
+        print("One or more required peripherals are missing. Aborting operations.")
+        if monitor then
+            monitor.clear()
+        end
+        return false
+    end
+end
+
+local function pollPeripherals()
+    while true do
+        sleep(5)
+        checkPeripherals()
+    end
+end
+
 
 -- Main logic
 local function run()
-    local modem, monitor
-    -- Identify wireless modem
-    local modems = { peripheral.find("modem", function(name, modem)
-        return modem.isWireless() -- Check this modem is wireless.
-    end) }
-    if #modems == 0 then
-        error("Missing wireless modem")
-    else
-        modem = modems[1] -- pick the first
-        print("Using wireless modem on side: " .. peripheral.getName(modem))
-    end
 
-    -- Identify monitor (required)
-    local monitors = { peripheral.find("monitor") }
-    if #monitors ~= 0 then
-        monitor = monitors[1]
-        print("Using Monitor on side: " .. peripheral.getName(monitor))
-    else
-        error("Missing monitor")
+    if not checkPeripherals() then
+        return
     end
 
     -- Ensure computer is labeled
@@ -201,7 +214,9 @@ local function run()
         end
     end
 
-    -- START
+    local peripheralPollingThread = monitorFrame:addThread()
+    peripheralPollingThread:start(pollPeripherals)
+
     local incomingThread = main:addThread()
     incomingThread:start(listenForData)
 
