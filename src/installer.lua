@@ -8,19 +8,17 @@ if not scriptName or scriptName == "" then
 end
 
 -- Define the base URL for raw user content on GitHub.
-local baseURL = "https://https://raw.githubusercontent.com/bngarren/computer-craft/master/src/"
+local baseURL = "https://raw.githubusercontent.com/bngarren/computer-craft/master/src/"
 
 -- Construct the full URL to the script.
 local scriptURL = baseURL .. scriptName
 
 -- Determine a local filename to save the script. This could be derived from the scriptPath,
 -- or you could allow the user to specify this as a second argument.
-local filename = args[2] or "downloaded_script.lua"
+local filename = args[2] or args[1] or "downloaded_script.lua"
 
 -- Download the script from GitHub.
 print("Downloading script from " .. scriptURL .. " to " .. filename .. "...")
 shell.run("wget", scriptURL, filename)
 
--- Execute the downloaded script.
-print("Running " .. filename .. "...")
-shell.run(filename)
+
