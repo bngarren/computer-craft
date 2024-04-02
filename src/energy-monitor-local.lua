@@ -43,6 +43,12 @@ local function checkPeripherals()
 
     if peripheralsReady then
         print("All required peripherals are present. Continuing operations...")
+        --ensure modem is open for rednet and on protocol
+        if not rednet.isOpen(peripheral.getName(modem)) then
+            rednet.open(peripheral.getName(modem))
+            rednet.host("energy-monitor", os.getComputerLabel())
+            util.coloredWrite("Modem opened for communication.\n", colors.cyan)
+        end
         return true
     else
         print("One or more required peripherals are missing. Paused operations.")
@@ -132,10 +138,6 @@ local function run()
         print("Type: " .. typeSetting)
     end
 
-    -- Identify network and master computer
-    rednet.open(peripheral.getName(modem))
-    rednet.host("energy-monitor", os.getComputerLabel())
-
     local master
     local function findMaster()
         local attempt = 0
@@ -155,21 +157,39 @@ local function run()
     end
 
     local function updateMaster()
+        local lastMasterCheckTime = 0
+        local masterCheckInterval = 5 -- Check if the master is still on the network every 5 seconds
+
         while true do
-            if shouldUpdate then
-                if not master or not rednet.isOpen(peripheral.getName(modem)) then
-                    findMaster()
+            local currentTime = os.epoch("utc") / 1000 -- Get current time in seconds
+
+            -- Periodically check if the master is present, regardless of the current update status
+            if currentTime - lastMasterCheckTime >= masterCheckInterval then
+                local foundMaster = findMaster()
+                if not foundMaster then
+                    print("Master not found during periodic check.")
+                    master = nil -- Clear the master variable if the master is not found
                 end
-                if master then
-                    local rate = energyMeter.getTransferRate()
+                lastMasterCheckTime = currentTime
+            end
+
+            if shouldUpdate and master then
+                -- Proceed with sending data to the master only if it's found and updates are enabled
+                local rate = energyMeter.getTransferRate()
+                if rate then -- Ensure rate is not nil before attempting to send
                     sendEnergyRate(master, rate)
                 else
-                    print("Master not found. Skipping update.")
+                    print("Failed to obtain energy transfer rate.")
                 end
             else
-                print("Peripherals not ready. Skipping update.")
+                if not shouldUpdate then
+                    print("Updates are paused. Skipping data send.")
+                end
+                if not master then
+                    print("Master not defined. Skipping data send.")
+                end
             end
-            sleep(5)
+            sleep(2)
         end
     end
 
