@@ -1,3 +1,6 @@
+-- How long until a local monitor is removed if no updates
+local EXPIRATION_TIME = 15000 -- 15 seconds
+
 -- Attempt to load the modules
 local util = require("util")
 
@@ -18,7 +21,6 @@ local function logToFile(message)
     end
 end
 
-local EXPIRATION_TIME = 15000 -- 15 seconds in milliseconds for this example
 local localEnergyMonitors = {}
 local function refreshLocalEnergyMonitors()
     while true do

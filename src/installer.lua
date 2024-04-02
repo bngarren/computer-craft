@@ -29,6 +29,7 @@
 local programs = {
     {name = "Energy Supply", path = "energy-supply.lua"},
     {name = "Energy Monitor Master", path = "energy-monitor-master.lua"},
+    {name = "Energy Monitor Local", path = "energy-monitor-local.lua"},
 }
 
 -- Function to write text in a specified color and then reset to the default color
