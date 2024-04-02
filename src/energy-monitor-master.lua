@@ -24,16 +24,19 @@ end
 local localEnergyMonitors = {}
 local function refreshLocalEnergyMonitors()
     while true do
+        local numberOfMonitors = 0
         local currentTime = os.epoch("utc")
         for name, data in pairs(localEnergyMonitors) do
             if (currentTime - data.time) > EXPIRATION_TIME then
                 -- Monitor hasn't sent an update in over the expiration time
                 localEnergyMonitors[name] = nil -- Remove expired monitor
                 -- logToFile("Removed expired monitor: " .. name)
+            else
+                numberOfMonitors = numberOfMonitors + 1
             end
         end
 
-        print("Tracking "..#localEnergyMonitors.." local energy monitors.")
+        print("Tracking "..numberOfMonitors.." local energy monitors.")
         -- logToFile(textutils.serialize(localEnergyMonitors) .. " - " .. os.time())
         sleep(5)
     end
@@ -56,7 +59,7 @@ local function listenForData()
 
         if data.type == "energyRate" then
             -- Process the data
-            -- basalt.debug("Received 'energyRate' from #" .. senderId .. " with name: " .. data.name .. "and payload: " ..data.payload)
+            print("Received 'energyRate' from #" .. senderId .. " with name: " .. data.name .. "and payload: " ..data.payload)
             localEnergyMonitors[data.name] = {
                 energyType = data.energyType,
                 rate = data.payload,
@@ -71,6 +74,8 @@ local requiredPeripherals = {
     ["monitor"] = "monitor", -- Expecting a monitor, will store in global `monitor` variable
 }
 
+local shouldUpdate = false
+
 local function checkPeripherals()
     print("Checking peripherals")
     -- Use the utility function to check for and wrap required peripherals
@@ -80,7 +85,7 @@ local function checkPeripherals()
         print("All required peripherals are present. Continuing operations...")
         return true
     else
-        print("One or more required peripherals are missing. Aborting operations.")
+        print("One or more required peripherals are missing. Paused operations.")
         if monitor then
             monitor.clear()
         end
@@ -91,14 +96,23 @@ end
 local function pollPeripherals()
     while true do
         sleep(5)
-        checkPeripherals()
+        if not checkPeripherals() then
+            shouldUpdate = false
+        else
+            shouldUpdate = true
+        end
     end
 end
 
 
 -- Main logic
 local function run()
+    term.clear()
+    print("\n")
+    util.coloredWrite("Energy Monitor Master - this is computer id #" .. os.getComputerID(), colors.yellow)
+    print("\n")
 
+    -- Initial peripherals check
     if not checkPeripherals() then
         return
     end
@@ -142,6 +156,15 @@ local function run()
 
     local function updateGui()
         while true do
+
+            if not shouldUpdate then
+                monitorFrame
+                    :addLabel()
+                    :setText("OFFLINE")
+                    :setForeground(colors.red)
+                break
+            end
+
             -- Remove existing labels
             for _, label in ipairs(energyMonitorLabels) do
                 label:remove()

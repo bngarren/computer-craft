@@ -26,7 +26,7 @@ local function sendEnergyRate(receiverId, val)
         energyType = settings.get("type") or "",
         payload = val
     }
-    print("Sent energy rate to #" .. receiverId)
+    print("Sent energy rate to 'master' on computer #" .. receiverId)
     util.sendData(receiverId, data, "energy-monitor")
 end
 
@@ -45,7 +45,7 @@ local function checkPeripherals()
         print("All required peripherals are present. Continuing operations...")
         return true
     else
-        print("One or more required peripherals are missing. Aborting operations.")
+        print("One or more required peripherals are missing. Paused operations.")
         if monitor then
             monitor.clear()
         end

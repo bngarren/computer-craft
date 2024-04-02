@@ -42,9 +42,9 @@ end
 
 -- Function to display a menu and allow the user to select a program
 local function selectProgram()
-    print("Available programs:")
+    coloredWrite("Available programs:", colors.lime)
     for i, program in ipairs(programs) do
-        print(i .. ") " .. program.name)
+        print(i .. "  ) " .. program.name)
     end
     coloredWrite("Select a program to install: ", colors.orange)
     print("\n")
