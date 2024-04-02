@@ -33,6 +33,7 @@ local function refreshLocalEnergyMonitors()
             end
         end
 
+        print("Tracking "..#localEnergyMonitors.." local energy monitors.")
         -- logToFile(textutils.serialize(localEnergyMonitors) .. " - " .. os.time())
         sleep(5)
     end
@@ -76,7 +77,7 @@ local function checkPeripherals()
     local peripheralsReady = util.checkSpecifiedPeripherals(requiredPeripherals)
 
     if peripheralsReady then
-        print("All required peripherals are present. Proceeding with operations...")
+        print("All required peripherals are present. Continuing operations...")
         return true
     else
         print("One or more required peripherals are missing. Aborting operations.")
