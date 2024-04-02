@@ -59,7 +59,8 @@ local filename = args[2] or scriptName
 
 -- Check if the file already exists and ask for confirmation to overwrite.
 if fs.exists(filename) then
-    coloredWrite(filename .. " already exists. Overwrite? [y/N]: ", colors.orange)
+    coloredWrite(filename .. " already exists. Overwrite? [y/N]:", colors.orange)
+    print()
     local input = read()
     if input:lower() ~= 'y' then
         coloredWrite("Installation cancelled.", colors.red)
@@ -107,7 +108,8 @@ end
 
 
 -- Ask the user if they want to update startup.lua to run the new file.
-coloredWrite("Do you want to update startup.lua to only run this file on boot? [y/N]: ", colors.orange)
+coloredWrite("Do you want to update startup.lua to only run this file on boot? [y/N]:", colors.orange)
+print()
 local updateStartup = read()
 if updateStartup:lower() == 'y' then
     -- Create or overwrite startup.lua
