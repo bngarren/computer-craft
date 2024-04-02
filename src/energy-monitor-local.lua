@@ -39,7 +39,8 @@ local function run()
         return modem.isWireless() -- Check this modem is wireless.
     end) }
     if #modems == 0 then
-        error("Missing wireless modem")
+        printError("Missing wireless modem")
+        return
     else
         modem = modems[1] -- pick the first
         print("Using wireless modem on side: " .. peripheral.getName(modem))
