@@ -32,13 +32,7 @@ local programs = {
     {name = "Energy Monitor Local", path = "energy-monitor-local.lua"},
 }
 
--- Function to write text in a specified color and then reset to the default color
-local function coloredWrite(text, color)
-    local defaultColor = term.getTextColor()  -- Save the current text color
-    term.setTextColor(color)                  -- Set the new text color
-    write(text)                               -- Write the text
-    term.setTextColor(defaultColor)           -- Reset the text color back to default
-end
+
 
 -- Function to display a menu and allow the user to select a program
 local function selectProgram()
@@ -46,7 +40,7 @@ local function selectProgram()
     for i, program in ipairs(programs) do
         print(i .. ") " .. program.name)
     end
-    coloredWrite("Select a program to install: ", colors.orange)
+    util.coloredWrite("Select a program to install: ", colors.orange)
     print("\n")
     local input = read()
     local selection = tonumber(input)
@@ -89,11 +83,11 @@ local filename = args[2] or scriptName
 
 -- Check if the file already exists and ask for confirmation to overwrite.
 if fs.exists(filename) then
-    coloredWrite(filename .. " already exists. Overwrite? [y/N]:", colors.orange)
+    util.coloredWrite(filename .. " already exists. Overwrite? [y/N]:", colors.orange)
     print("\n")
     local input = read()
     if input:lower() ~= 'y' then
-        coloredWrite("Installation cancelled.", colors.red)
+        util.coloredWrite("Installation cancelled.", colors.red)
         return
     else
         fs.delete(filename)
@@ -111,7 +105,7 @@ end
 -- Download the main script
 local success = downloadFile(scriptURL, filename)
 if not success then
-    coloredWrite("Failed to download " .. scriptName, colors.red)
+    util.coloredWrite("Failed to download " .. scriptName, colors.red)
     return
 end
 
@@ -124,7 +118,7 @@ if downloadFile(depsURL, "temp.deps") then
     while line do
         print("Downloading dependency: " .. line)
         if not downloadFile(baseURL .. line, line) then
-            coloredWrite("Failed to download dependency: " .. line, colors.red)
+            util.coloredWrite("Failed to download dependency: " .. line, colors.red)
             deps.close()
             return
         end
@@ -138,7 +132,7 @@ end
 
 
 -- Ask the user if they want to update startup.lua to run the new file.
-coloredWrite("Do you want to update startup.lua to only run this file on boot? [y/N]:", colors.orange)
+util.coloredWrite("Do you want to update startup.lua to only run this file on boot? [y/N]:", colors.orange)
 print("\n")
 local updateStartup = read()
 if updateStartup:lower() == 'y' then
@@ -153,5 +147,5 @@ else
     print("Startup script not modified.")
 end
 
-coloredWrite("Installation complete.", colors.lime)
+util.coloredWrite("Installation complete.", colors.lime)
 print("\n")

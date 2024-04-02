@@ -82,6 +82,15 @@ function util.openModem()
     return false
 end
 
+-- Function to write text in a specified color and then reset to the default color
+function util.coloredWrite(text, color)
+    if not term then return end
+    local defaultColor = term.getTextColor()  -- Save the current text color
+    term.setTextColor(color)                  -- Set the new text color
+    write(text)                               -- Write the text
+    term.setTextColor(defaultColor)           -- Reset the text color back to default
+end
+
 function util.tableContains(table, element)
     for _, value in pairs(table) do
       if value == element then

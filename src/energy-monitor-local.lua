@@ -30,31 +30,51 @@ local function sendEnergyRate(receiverId, val)
     util.sendData(receiverId, data, "energy-monitor")
 end
 
+local requiredPeripherals = {
+    [util.findWirelessModem] = "modem",
+    ["energymeter"] = "energyMeter",
+}
+local shouldUpdate = false
+
+local function checkPeripherals()
+    print("Checking peripherals")
+    -- Use the utility function to check for and wrap required peripherals
+    local peripheralsReady = util.checkSpecifiedPeripherals(requiredPeripherals)
+
+    if peripheralsReady then
+        print("All required peripherals are present. Continuing operations...")
+        return true
+    else
+        print("One or more required peripherals are missing. Aborting operations.")
+        if monitor then
+            monitor.clear()
+        end
+        return false
+    end
+end
+
+local function pollPeripherals()
+    while true do
+        sleep(5)
+        if not checkPeripherals() then
+            shouldUpdate = false
+        else
+            shouldUpdate = true
+        end
+    end
+end
+
 
 -- Main logic
 local function run()
-    local modem, energyMeter
-    -- Identify wireless modem
-    local modems = { peripheral.find("modem", function(name, modem)
-        return modem.isWireless() -- Check this modem is wireless.
-    end) }
-    if #modems == 0 then
-        printError("Missing wireless modem")
-        return
-    else
-        modem = modems[1] -- pick the first
-        print("Using wireless modem on side: " .. peripheral.getName(modem))
-    end
+    term.clear()
+    print("\n")
+    util.coloredWrite("Energy Monitor Local - this is computer id #" .. os.getComputerID(), colors.blue)
+    print("\n")
 
-    -- Identify energy meter (required)
-    local meters = { peripheral.find("energymeter") }
-    if #meters == 0 then
-        printError("Missing Energy Meter")
+    -- Initial peripherals check
+    if not checkPeripherals() then
         return
-    else
-        energyMeter = meters[1] -- pick the first
-        print("Using Energy Meter on side: " .. peripheral.getName(energyMeter))
-        -- textutils.tabulate(peripheral.getMethods(peripheral.getName(energyMeter)))
     end
 
     -- Ensure Energy Meter is configured correctly
@@ -68,7 +88,8 @@ local function run()
     local typeSetting = settings.get("type")
 
     if not currentLabel then
-        print("Enter a new label for the computer. It cannot be 'master' or empty.")
+        util.coloredWrite("Enter a new label for the computer. It cannot be 'master' or empty.", colors.orange)
+        print("\n")
         local isValid = false
         while not isValid do
             write("Label: ")
@@ -82,7 +103,8 @@ local function run()
             end
         end
     else
-        print("Computer is already named: " .. os.getComputerLabel())
+        print("Computer is named: " .. os.getComputerLabel())
+        print("\n")
     end
 
     -- Ensure computer has a "type" (from settings)
@@ -90,7 +112,8 @@ local function run()
     if not typeSetting then
         local isValid = false
         while not isValid do
-            print("Choose the type: 1) Producer 2) Consumer")
+            util.coloredWrite("Choose the type: 1) Producer 2) Consumer", colors.orange)
+            print("\n")
             local input = read()
             if input == "1" then
                 typeSetting = "Producer"
@@ -99,7 +122,7 @@ local function run()
                 typeSetting = "Consumer"
                 isValid = true
             else
-                print("Invalid input. Please enter 1 for Producer or 2 for Consumer.")
+                util.coloredWrite("Invalid input. Please enter 1 for Producer or 2 for Consumer.", colors.red)
             end
         end
         settings.set("type", typeSetting)
@@ -113,24 +136,34 @@ local function run()
     rednet.open(peripheral.getName(modem))
     rednet.host("energy-monitor", os.getComputerLabel())
 
-    local master = rednet.lookup("energy-monitor", "master")
-    if master then
-        print("Found 'master' at computer #" .. master)
-    else
-        printError("Cannot find 'master' on network")
+    local master
+    local function findMaster()
+        master = rednet.lookup("energy-monitor", "master")
+        if master then
+            print("Found 'master' on computer #" .. master)
+        else
+            printError("Cannot find 'master' on network")
+        end
+        return master or nil
     end
-
 
     local function updateMaster()
         while true do
-            local rate = energyMeter.getTransferRate()
-            sendEnergyRate(master, rate)
+            if shouldUpdate then
+
+                if not master then
+                    findMaster()
+                end
+
+                local rate = energyMeter.getTransferRate()
+                sendEnergyRate(master, rate)
+            end
             sleep(5)
         end
     end
 
     -- Start
-    parallel.waitForAny(listenForData, updateMaster)
+    parallel.waitForAny(pollPeripherals, listenForData, updateMaster)
 end
 
 run()
