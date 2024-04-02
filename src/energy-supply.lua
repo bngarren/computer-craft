@@ -131,7 +131,9 @@ local function checkPeripherals()
     else
         print("Missing essential peripherals. Updates paused.")
         shouldUpdate = false
-        monitor.clear()
+        if monitor then
+            monitor.clear()
+        end
     end
     return currentStatus
 end

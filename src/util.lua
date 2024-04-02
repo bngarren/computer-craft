@@ -7,7 +7,7 @@ function util.ensureModuleExists(moduleName, action)
 
     if not fs.exists(filePath) then
         if action then
-            local success = action(moduleName)
+            local success = action(filePath)
             if success then
                 return require(moduleName)
             else
