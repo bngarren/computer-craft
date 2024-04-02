@@ -3,29 +3,11 @@ local ENERGY_LEVEL_RED = 20    -- percent
 local ENERGY_LEVEL_ORANGE = 50 -- percent
 local ENERGY_LEVEL_YELLOW = 70 -- percent
 
-local function ensureModuleExists(moduleName, action)
-    local filePath = moduleName .. ".lua"
-
-    if not fs.exists(filePath) then
-        print("Module '" .. moduleName .. "' not found. Downloading from Pastebin...")
-        action(filePath)
-    end
-
-    if fs.exists(filePath) then
-        return require(moduleName)
-    else
-        error("Failed to download the module '" .. moduleName .. "'.")
-    end
-end
 
 -- Attempt to load the modules
-local util = ensureModuleExists("util", function(...)
-    -- Command to download from Pastebin
-    shell.run("pastebin", "get", "cidaD9Jp", ...)
-end
-)
+local util = require("util")
 
-local basalt = ensureModuleExists("basalt", function(...)
+local basalt = util.ensureModuleExists("basalt", function(...)
     -- Command to download from Pastebin
     shell.run("wget", "run", "https://basalt.madefor.cc/install.lua", "release", "latest.lua", ...)
 end

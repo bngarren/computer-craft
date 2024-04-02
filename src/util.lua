@@ -2,6 +2,22 @@ local util = {}
 
 util.sides = {"left", "right", "top", "bottom", "front", "back"}
 
+function util.ensureModuleExists(moduleName, action)
+    local filePath = moduleName .. ".lua"
+
+    if not fs.exists(filePath) then
+        if action then
+            local success = action(moduleName)
+            if success then
+                return require(moduleName)
+            end
+        end
+        print("Module '" .. moduleName .. "' not found. Consider re-running installer and ensure .deps file includes " ..moduleName)
+    else
+        return require(moduleName)
+    end
+end
+
 function util.centerText(mon, text, yVal)
     local length = string.len(text)
     local monX, _ = mon.getSize() -- Get the width and ignore the height

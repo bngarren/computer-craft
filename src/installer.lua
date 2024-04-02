@@ -27,7 +27,7 @@
 ]]
 
 -- Function to write text in a specified color and then reset to the default color
-function coloredWrite(text, color)
+local function coloredWrite(text, color)
     local defaultColor = term.getTextColor()  -- Save the current text color
     term.setTextColor(color)                  -- Set the new text color
     write(text)                               -- Write the text
@@ -121,4 +121,4 @@ else
     print("Startup script not modified.")
 end
 
-coloredWrite("Installation complete.", colors.green)
+coloredWrite("Installation complete.\n", colors.lime)
