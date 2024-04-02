@@ -36,7 +36,7 @@ local function refreshLocalEnergyMonitors()
             end
         end
 
-        util.coloredWrite("Tracking " .. numberOfMonitors .. " local energy monitors.\n", colors.lightGray)
+        util.coloredWrite("Tracking " .. numberOfMonitors .. " local energy monitors.", colors.lightGray)
         -- logToFile(textutils.serialize(localEnergyMonitors) .. " - " .. os.time())
         sleep(5)
     end
@@ -89,11 +89,11 @@ local function checkPeripherals()
         if not rednet.isOpen(peripheral.getName(modem)) then
             rednet.open(peripheral.getName(modem))
             rednet.host("energy-monitor", os.getComputerLabel())
-            util.coloredWrite("Modem opened for communication.\n", colors.cyan)
+            util.coloredWrite("Modem opened for communication.", colors.cyan)
         end
         return true
     else
-        util.coloredWrite("One or more required peripherals are missing. Paused operations.\n", colors.yellow)
+        util.coloredWrite("One or more required peripherals are missing. Paused operations.", colors.yellow)
         if monitor then
             monitor.clear()
         end

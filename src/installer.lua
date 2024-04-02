@@ -36,18 +36,17 @@ local function coloredWrite(text, color)
     if not term then return end
     local defaultColor = term.getTextColor()  -- Save the current text color
     term.setTextColor(color)                  -- Set the new text color
-    write(text)                               -- Write the text
+    write(text.."\n")                               -- Write the text
     term.setTextColor(defaultColor)           -- Reset the text color back to default
 end
 
 -- Function to display a menu and allow the user to select a program
 local function selectProgram()
-    coloredWrite("Available programs:\n", colors.lime)
+    coloredWrite("Available programs:", colors.lime)
     for i, program in ipairs(programs) do
         print(i .. "  ) " .. program.name)
     end
     coloredWrite("Select a program to install: ", colors.orange)
-    print("\n")
     local input = read()
     local selection = tonumber(input)
     if selection and selection >= 1 and selection <= #programs then
@@ -90,7 +89,6 @@ local filename = args[2] or scriptName
 -- Check if the file already exists and ask for confirmation to overwrite.
 if fs.exists(filename) then
     coloredWrite(filename .. " already exists. Overwrite? [y/N]:", colors.orange)
-    print("\n")
     local input = read()
     if input:lower() ~= 'y' then
         coloredWrite("Installation cancelled.", colors.red)
@@ -139,7 +137,6 @@ end
 
 -- Ask the user if they want to update startup.lua to run the new file.
 coloredWrite("Do you want to update startup.lua to only run this file on boot? [y/N]:", colors.orange)
-print("\n")
 local updateStartup = read()
 if updateStartup:lower() == 'y' then
     -- Create or overwrite startup.lua
@@ -154,4 +151,3 @@ else
 end
 
 coloredWrite("Installation complete.", colors.lime)
-print("\n")
