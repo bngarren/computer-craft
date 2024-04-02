@@ -55,12 +55,12 @@ end
 
 local function pollPeripherals()
     while true do
-        sleep(5)
         if not checkPeripherals() then
             shouldUpdate = false
         else
             shouldUpdate = true
         end
+        sleep(5)
     end
 end
 
@@ -150,7 +150,6 @@ local function run()
     local function updateMaster()
         while true do
             if shouldUpdate then
-
                 if not master then
                     findMaster()
                 end
