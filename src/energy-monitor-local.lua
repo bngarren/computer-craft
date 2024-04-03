@@ -1,9 +1,14 @@
 -- Attempt to load the modules
 local util = require("util")
 
+local UPDATE_INTERVAL = 2 -- seconds
+local MASTER_CHECK_INTERVAL = 5 -- seconds
+local POLL_PERIPHERALS_INTERVAL = 5 -- seconds
+local NETWORK_PROTOCOL = "energy-monitor"
+
 local function listenForData()
     while true do
-        local senderId, message, protocol = rednet.receive("energy-monitor")
+        local senderId, message, protocol = rednet.receive(NETWORK_PROTOCOL)
 
         local data = textutils.unserialize(message)
         -- Now `data` is a table, so you can access its contents
@@ -18,7 +23,7 @@ local function listenForData()
     end
 end
 
-
+-- Messaging functions
 local function sendEnergyRate(receiverId, val)
     local data = {
         type = "energyRate",
@@ -26,8 +31,8 @@ local function sendEnergyRate(receiverId, val)
         energyType = settings.get("type") or "",
         payload = val
     }
-    print("Sent energy rate to 'master' on computer #" .. receiverId)
-    util.sendData(receiverId, data, "energy-monitor")
+    print("Computer #"..os.getComputerID().." ("..data.name..") sent energy rate of "..util.formatNumber(payload).." to 'master' on computer #" .. receiverId)
+    util.sendData(receiverId, data, NETWORK_PROTOCOL)
 end
 
 local requiredPeripherals = {
@@ -37,17 +42,15 @@ local requiredPeripherals = {
 local shouldUpdate = false
 
 local function checkPeripherals()
-    print("Checking peripherals")
+    -- print("Checking peripherals")
     -- Use the utility function to check for and wrap required peripherals
     local peripheralsReady = util.checkSpecifiedPeripherals(requiredPeripherals)
 
     if peripheralsReady then
-        print("All required peripherals are present. Continuing operations...")
+        -- print("All required peripherals are present. Continuing operations...")
         --ensure modem is open for rednet and on protocol
         if not rednet.isOpen(peripheral.getName(modem)) then
-            rednet.open(peripheral.getName(modem))
-            rednet.host("energy-monitor", os.getComputerLabel())
-            util.coloredWrite("Modem opened for communication.\n", colors.cyan)
+            util.initNetwork(modem, NETWORK_PROTOCOL, os.getComputerLabel())
         end
         return true
     else
@@ -66,7 +69,7 @@ local function pollPeripherals()
         else
             shouldUpdate = true
         end
-        sleep(5)
+        sleep(POLL_PERIPHERALS_INTERVAL)
     end
 end
 
@@ -98,7 +101,7 @@ local function run()
             end
         end
     else
-        print("Computer is named: " .. os.getComputerLabel())
+        util.coloredWrite("Computer is named: " .. os.getComputerLabel(), colors.cyan)
         print("\n")
     end
 
@@ -107,7 +110,7 @@ local function run()
     if not typeSetting then
         local isValid = false
         while not isValid do
-            util.coloredWrite("Choose the type:\n 1) Producer\n 2) Consumer\n", colors.orange)
+            util.coloredWrite("Choose the type:\n 1) Producer\n 2) Consumer", colors.orange)
             local input = read()
             if input == "1" then
                 typeSetting = "Producer"
@@ -123,7 +126,7 @@ local function run()
         settings.save()
         print("Type set to: " .. typeSetting)
     else
-        print("Type: " .. typeSetting)
+        util.coloredWrite("Type: " .. typeSetting, colors.cyan)
     end
 
     local master
@@ -131,13 +134,13 @@ local function run()
         local attempt = 0
         local maxAttempts = 2
         while attempt < maxAttempts do
-            master = rednet.lookup("energy-monitor", "master")
+            master = rednet.lookup(NETWORK_PROTOCOL, "master")
             if master then
                 print("Found 'master' on computer #" .. master)
                 return master
             else
                 attempt = attempt + 1
-                util.coloredWrite("Retrying to find 'master'... Attempt " .. attempt.."\n", colors.yellow)
+                util.coloredWrite("Retrying to find 'master'... Attempt " .. attempt, colors.yellow)
                 sleep(0.5) -- Wait a bit before retrying
             end
         end
@@ -146,13 +149,12 @@ local function run()
 
     local function updateMaster()
         local lastMasterCheckTime = 0
-        local masterCheckInterval = 5 -- Check if the master is still on the network every 5 seconds
 
         while true do
             local currentTime = os.epoch("utc") / 1000 -- Get current time in seconds
 
             -- Periodically check if the master is present, regardless of the current update status
-            if currentTime - lastMasterCheckTime >= masterCheckInterval then
+            if shouldUpdate and (currentTime - lastMasterCheckTime >= MASTER_CHECK_INTERVAL) then
                 local foundMaster = findMaster()
                 if not foundMaster then
                     print("Master not found during periodic check.")
@@ -167,17 +169,17 @@ local function run()
                 if rate then -- Ensure rate is not nil before attempting to send
                     sendEnergyRate(master, rate)
                 else
-                    util.coloredWrite("Failed to obtain energy transfer rate. Couldn't send data.\n", colors.yellow)
+                    util.coloredWrite("Failed to obtain energy transfer rate. Couldn't send data", colors.yellow)
                 end
             else
                 if not shouldUpdate then
-                    util.coloredWrite("Updates are paused. Skipping data send.\n", colors.yellow)
+                    util.coloredWrite("Updates are paused. Skipping data send", colors.yellow)
                 end
                 if not master then
-                    util.coloredWrite("Master not defined. Skipping data send.\n", colors.yellow)
+                    util.coloredWrite("Master not defined (unreachable). Skipping data send.", colors.yellow)
                 end
             end
-            sleep(2)
+            sleep(UPDATE_INTERVAL)
         end
     end
 
@@ -185,6 +187,9 @@ local function run()
     if not checkPeripherals() then
         return
     end
+
+    -- Initialize network (modem open and rednet host on protocol)
+    util.initNetwork(modem, NETWORK_PROTOCOL, os.getComputerLabel())
     
         -- Ensure Energy Meter is configured correctly
     if not energyMeter.hasInput() or not energyMeter.hasOutput() or energyMeter.getStatus() == "DISCONNECTED" then

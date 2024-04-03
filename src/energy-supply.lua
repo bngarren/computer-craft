@@ -48,23 +48,6 @@ local function findEnergyStorage()
     return nil  -- Return nil if no valid energy storage peripheral is found
 end
 
-
-local function formatNumber(num)
-    if num >= 1e12 then
-        return string.format("%.1f T", num / 1e12)
-    elseif num >= 1e9 then
-        return string.format("%.1f B", num / 1e9)
-    elseif num >= 1e6 then
-        return string.format("%.1f M", num / 1e6)
-    elseif num >= 1e3 then
-        return string.format("%.1f K", num / 1e3)
-    else
-        -- For numbers less than 1000, return them as integers
-        -- No need for formatting with commas, and ensures no decimals
-        return tostring(math.floor(num))
-    end
-end
-
 local function getPercentColor(val)
     if val < ENERGY_LEVEL_RED then
         return colors.red
@@ -218,9 +201,9 @@ local function run()
                     energyChangePercent = rawEnergyChange / energyCapacity * 100.0
                 end
 
-                energyStoredLabel:setText(formatNumber(energyStored))
+                energyStoredLabel:setText(util.formatNumber(energyStored))
 
-                energyCapacityLabel:setText("/" .. formatNumber(energyCapacity))
+                energyCapacityLabel:setText("/" .. util.formatNumber(energyCapacity))
                 energyPercentLabel:setText(string.format("%d%%  ", energyPercent or 1)):setForeground(
                     getPercentColor(
                         energyPercent))
@@ -235,7 +218,7 @@ local function run()
                 end
 
                 local energyChangePerTick = rawEnergyChange / 20
-                energyChangePerTickLabel:setText(formatNumber(math.abs(energyChangePerTick)) .. " FE/t")
+                energyChangePerTickLabel:setText(util.formatNumber(math.abs(energyChangePerTick)) .. " FE/t")
             else
                 print("Update paused")
                 pausedFrame:setSize(monitorFrame.getSize()):show()

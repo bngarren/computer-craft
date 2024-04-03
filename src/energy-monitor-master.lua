@@ -77,19 +77,16 @@ local requiredPeripherals = {
 local shouldUpdate = false
 
 local function checkPeripherals()
-    print("Checking peripherals")
+    -- print("Checking peripherals")
     -- Use the utility function to check for and wrap required peripherals
     local peripheralsReady = util.checkSpecifiedPeripherals(requiredPeripherals)
 
     if peripheralsReady then
-
-        print("All required peripherals are present. Continuing operations...")
+        -- print("All required peripherals are present. Continuing operations...")
 
         --ensure modem is open for rednet and on protocol
         if not rednet.isOpen(peripheral.getName(modem)) then
-            rednet.open(peripheral.getName(modem))
-            rednet.host("energy-monitor", os.getComputerLabel())
-            util.coloredWrite("Modem opened for communication.", colors.cyan)
+            util.initNetwork(modem, "energy-monitor", os.getComputerLabel())
         end
         return true
     else
@@ -117,7 +114,7 @@ end
 local function run()
     term.clear()
     print("\n")
-    util.coloredWrite("Energy Monitor Master - this is computer id #" .. os.getComputerID(), colors.yellow)
+    util.coloredWrite("Energy Monitor Master - this is computer id #" .. os.getComputerID(), colors.blue)
     print("\n")
 
     -- Initial peripherals check
@@ -129,9 +126,8 @@ local function run()
     -- Ensure computer is labeled
     os.setComputerLabel("master")
 
-    rednet.open(peripheral.getName(modem))
-    rednet.host("energy-monitor", os.getComputerLabel())
-    util.coloredWrite("Modem opened for communication.", colors.cyan)
+    -- Initialize network (modem open and rednet host on protocol)
+    util.initNetwork(modem, "energy-monitor", os.getComputerLabel())
 
     -- GUI
     local monitorFrame

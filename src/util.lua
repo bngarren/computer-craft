@@ -70,6 +70,37 @@ function util.findWirelessModem()
     return m or nil
 end
 
+--[[
+    Opens the modem and hosts it on the specified protocol with the specified name
+
+    'modem' is the wrapped peripheral
+]]
+function util.initNetwork(modem, protocol, name)
+    if pcall(function() rednet.open(peripheral.getName(modem)) end) then
+        printError("Could not open modem connection")
+        return false
+    end
+    rednet.host(protocol, name or os.getComputerLabel())
+    util.coloredWrite("Modem opened for communication.", colors.cyan)
+    return true
+end
+
+function util.formatNumber(num)
+    if num >= 1e12 then
+        return string.format("%.1f T", num / 1e12)
+    elseif num >= 1e9 then
+        return string.format("%.1f B", num / 1e9)
+    elseif num >= 1e6 then
+        return string.format("%.1f M", num / 1e6)
+    elseif num >= 1e3 then
+        return string.format("%.1f K", num / 1e3)
+    else
+        -- For numbers less than 1000, return them as integers
+        -- No need for formatting with commas, and ensures no decimals
+        return tostring(math.floor(num))
+    end
+end
+
 function util.centerText(mon, text, yVal)
     local length = string.len(text)
     local monX, _ = mon.getSize() -- Get the width and ignore the height
