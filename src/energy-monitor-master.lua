@@ -1,6 +1,3 @@
--- How long until a local monitor is removed if no updates
-local EXPIRATION_TIME = 15000 -- 15 seconds
-
 -- Attempt to load the modules
 local util = require("util")
 
@@ -9,6 +6,13 @@ local basalt = util.ensureModuleExists("basalt", function(...)
     return shell.run("wget", "run", "https://basalt.madefor.cc/install.lua", "release", "latest.lua", ...)
 end
 )
+-- Gui updates
+local UPDATE_INTERVAL = 2 -- seconds
+-- How long until a local monitor is removed if no updates
+local EXPIRATION_TIME = 15000 -- 15 seconds
+local REFRESH_LOCAL_MONITORS_INTERVAL = 5 --seconds
+local POLL_PERIPHERALS_INTERVAL = 5 -- seconds
+local NETWORK_PROTOCOL = "energy-monitor"
 
 local function logToFile(message)
     local logFile = fs.open("log.txt", "a")                            -- Open the log file in append mode
@@ -38,13 +42,13 @@ local function refreshLocalEnergyMonitors()
 
         util.coloredWrite("Tracking " .. numberOfMonitors .. " local energy monitors.", colors.lightGray)
         -- logToFile(textutils.serialize(localEnergyMonitors) .. " - " .. os.time())
-        sleep(5)
+        sleep(REFRESH_LOCAL_MONITORS_INTERVAL)
     end
 end
 
 local function listenForData()
     while true do
-        local senderId, message, protocol = rednet.receive("energy-monitor")
+        local senderId, message, protocol = rednet.receive(NETWORK_PROTOCOL)
 
         local data = textutils.unserialize(message)
         -- Now `data` is a table, so you can access its contents
@@ -86,7 +90,7 @@ local function checkPeripherals()
 
         --ensure modem is open for rednet and on protocol
         if not rednet.isOpen(peripheral.getName(modem)) then
-            util.initNetwork(modem, "energy-monitor", os.getComputerLabel())
+            util.initNetwork(modem, NETWORK_PROTOCOL, os.getComputerLabel())
         end
         return true
     else
@@ -105,7 +109,7 @@ local function pollPeripherals()
         else
             shouldUpdate = true
         end
-        sleep(5)
+        sleep(POLL_PERIPHERALS_INTERVAL)
     end
 end
 
@@ -127,7 +131,7 @@ local function run()
     os.setComputerLabel("master")
 
     -- Initialize network (modem open and rednet host on protocol)
-    util.initNetwork(modem, "energy-monitor", os.getComputerLabel())
+    util.initNetwork(modem, NETWORK_PROTOCOL, os.getComputerLabel())
 
     -- GUI
     local monitorFrame
@@ -248,7 +252,7 @@ local function run()
                 table.insert(energyMonitorLabels, consumerTotalLabel)
             end
 
-            sleep(2) -- Refresh the GUI every 5 seconds
+            sleep(UPDATE_INTERVAL) -- Refresh the GUI every 5 seconds
         end
     end
 

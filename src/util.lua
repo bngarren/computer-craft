@@ -87,6 +87,7 @@ function util.initNetwork(modem, protocol, name)
 end
 
 function util.formatNumber(num)
+    if not num then return "0" end
     if num >= 1e12 then
         return string.format("%.1f T", num / 1e12)
     elseif num >= 1e9 then
