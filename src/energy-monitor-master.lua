@@ -129,6 +129,10 @@ local function run()
     -- Ensure computer is labeled
     os.setComputerLabel("master")
 
+    rednet.open(peripheral.getName(modem))
+    rednet.host("energy-monitor", os.getComputerLabel())
+    util.coloredWrite("Modem opened for communication.", colors.cyan)
+
     -- GUI
     local monitorFrame
     local mainGuiFrame, pausedFrame
