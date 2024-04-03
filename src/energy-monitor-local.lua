@@ -78,11 +78,6 @@ local function run()
     util.coloredWrite("Energy Monitor Local - this is computer id #" .. os.getComputerID(), colors.blue)
     print("\n")
 
-    -- Initial peripherals check
-    if not checkPeripherals() then
-        return
-    end
-
     -- Ensure Energy Meter is configured correctly
     if not energyMeter.hasInput() or not energyMeter.hasOutput() or energyMeter.getStatus() == "DISCONNECTED" then
         printError("Energy Meter is not properly configured!")
@@ -190,6 +185,11 @@ local function run()
             end
             sleep(2)
         end
+    end
+
+     -- Initial peripherals check
+    if not checkPeripherals() then
+        return
     end
 
     -- Start
