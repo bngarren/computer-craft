@@ -76,8 +76,9 @@ end
     'modem' is the wrapped peripheral
 ]]
 function util.initNetwork(modem, protocol, name)
-    if pcall(function() rednet.open(peripheral.getName(modem)) end) then
-        printError("Could not open modem connection")
+    local status, err = pcall(function() rednet.open(peripheral.getName(modem)) end)
+    if not status then
+        printError("Could not open modem connection: "..err)
         return false
     end
     rednet.host(protocol, name or os.getComputerLabel())
