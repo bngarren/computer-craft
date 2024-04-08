@@ -7,11 +7,11 @@ local basalt = util.ensureModuleExists("basalt", function(...)
 end
 )
 -- Gui updates
-local UPDATE_INTERVAL = 2 -- seconds
+local UPDATE_INTERVAL = 2                 -- seconds
 -- How long until a local monitor is removed if no updates
-local EXPIRATION_TIME = 15000 -- 15 seconds
+local EXPIRATION_TIME = 15000             -- 15 seconds
 local REFRESH_LOCAL_MONITORS_INTERVAL = 5 --seconds
-local POLL_PERIPHERALS_INTERVAL = 5 -- seconds
+local POLL_PERIPHERALS_INTERVAL = 5       -- seconds
 local NETWORK_PROTOCOL = "energy-monitor"
 
 local function logToFile(message)
@@ -133,29 +133,50 @@ local function run()
     -- Initialize network (modem open and rednet host on protocol)
     util.initNetwork(modem, NETWORK_PROTOCOL, os.getComputerLabel())
 
-    -- GUI
-    local monitorFrame
-    local mainGuiFrame, pausedFrame
+    -- GUI Setup
+    local monitorFrame = basalt.addMonitor():setMonitor(peripheral.getName(monitor))
+    monitorFrame.setTextScale(0.5)
+    local mainGuiFrame, pausedFrame = monitorFrame:addFrame(), monitorFrame:addFrame():hide()
     local energyMonitorLabels = {}
-
-    monitor.setTextScale(0.5)
-    monitorFrame = basalt.addMonitor():setMonitor(peripheral.getName(monitor))
 
     local monitorX, monitorY = monitorFrame.getSize()
 
     mainGuiFrame = monitorFrame:addFrame():setSize(monitorX, monitorY)
     pausedFrame = monitorFrame:addFrame():setSize(monitorX, monitorY):hide()
 
-    local function addMonitorLabel(name, data, yPos, textColor)
+
+    -- Define helper functions for GUI updates
+    local function addSectionHeading(yPos, text, backgroundColor, textColor)
         local label = mainGuiFrame:addLabel()
-            :setText(name .. ": " .. util.formatNumber(data.rate) .. " FE/t")
+            :setText(text)
             :setPosition(1, yPos)
             :setSize("parent.w", 1)
-            :setBackground(colors.gray)
+            :setBackground(backgroundColor)
             :setForeground(textColor)
-
         table.insert(energyMonitorLabels, label)
-        return yPos + 1 -- Return the next position for a label
+        return yPos + 1
+    end
+
+    local function addTotalLabel(yPos, text, textColor)
+        local label = mainGuiFrame:addLabel()
+            :setText(text)
+            :setPosition(1, yPos)
+            :setSize("parent.w", 1)
+            :setForeground(textColor)
+            :setTextAlign("right")
+        table.insert(energyMonitorLabels, label)
+        return yPos + 1
+    end
+
+    local function addMonitorLabel(yPos, name, rate, textColor)
+        local text = name .. ": " .. util.formatNumber(rate) .. " FE/t"
+        local label = mainGuiFrame:addLabel()
+            :setText(text)
+            :setPosition(1, yPos)
+            :setSize("parent.w", 1)
+            :setForeground(textColor)
+        table.insert(energyMonitorLabels, label)
+        return yPos + 1
     end
 
     local function updateGui()
@@ -178,71 +199,52 @@ local function run()
             :setForeground(colors.red)
             :setTextAlign("right")
 
-            while true do
-                if not shouldUpdate then
-                    pausedFrame:show()
-                else
-                    pausedFrame:hide()
-                    -- Remove existing labels
-                    for _, label in ipairs(energyMonitorLabels) do
-                        label:remove()
-                    end
-                    energyMonitorLabels = {} -- Reset the table for the next iteration
-            
-                    local yPos = 3 -- Start position for the first monitor label
-                    local totalProducerRate = 0
-                    local totalConsumerRate = 0
-            
-                    -- Separate and sort the producers and consumers
-                    local producers = {}
-                    local consumers = {}
-                    for name, data in pairs(localEnergyMonitors) do
-                        if data.energyType == "Producer" then
-                            table.insert(producers, {name = name, data = data})
-                        elseif data.energyType == "Consumer" then
-                            table.insert(consumers, {name = name, data = data})
-                        end
-                    end
-            
-                    -- Sort the producers and consumers by name
-                    table.sort(producers, function(a, b) return a.name < b.name end)
-                    table.sort(consumers, function(a, b) return a.name < b.name end)
-            
-                    -- Heading for Producers
-                    local producerHeading = mainGuiFrame:addLabel()
-                        :setText("Producers")
-                        :setPosition(1, yPos)
-                        :setSize("parent.w", 1)
-                        :setBackground(colors.blue)
-                        :setForeground(colors.white)
-                    table.insert(energyMonitorLabels, producerHeading)
-                    yPos = yPos + 1
-            
-                    -- Add sorted Producer labels
-                    for _, entry in ipairs(producers) do
-                        yPos = addMonitorLabel(entry.name, entry.data, yPos, colors.lime)
-                        totalProducerRate = totalProducerRate + entry.data.rate
-                    end
-            
-                    -- Total for Producers
-                    yPos = addTotalLabel("Total: " .. tostring(totalProducerRate) .. " FE/t", yPos, colors.green)
-                    yPos = yPos + 2 -- Space before Consumer heading
-            
-                    -- Heading for Consumers
-                    yPos = addSectionHeading("Consumers", yPos, colors.blue, colors.white)
-            
-                    -- Add sorted Consumer labels
-                    for _, entry in ipairs(consumers) do
-                        yPos = addMonitorLabel(entry.name, entry.data, yPos, colors.red)
-                        totalConsumerRate = totalConsumerRate + entry.data.rate
-                    end
-            
-                    -- Total for Consumers
-                    yPos = addTotalLabel("Total: " .. tostring(totalConsumerRate) .. " FE/t", yPos, colors.red)
+        while true do
+            if not shouldUpdate then
+                pausedFrame:show()
+            else
+                pausedFrame:hide()
+                -- Remove existing labels
+                for _, label in ipairs(energyMonitorLabels) do
+                    label:remove()
                 end
-            
-                sleep(UPDATE_INTERVAL) -- Refresh the GUI every 5 seconds
+                energyMonitorLabels = {}     -- Reset the table for the next iteration
+
+                local yPos = 3               -- Start position for the first label
+                local totalProducerRate, totalConsumerRate = 0, 0
+
+                -- Separate and sort the producers and consumers
+                local producers, consumers = {}, {}
+                for name, data in pairs(localEnergyMonitors) do
+                    if data.energyType == "Producer" then
+                        table.insert(producers, { name = name, rate = data.rate })
+                        totalProducerRate = totalProducerRate + data.rate
+                    elseif data.energyType == "Consumer" then
+                        table.insert(consumers, { name = name, rate = data.rate })
+                        totalConsumerRate = totalConsumerRate + data.rate
+                    end
+                end
+                table.sort(producers, function(a, b) return a.name < b.name end)
+                table.sort(consumers, function(a, b) return a.name < b.name end)
+
+                -- Add labels for producers
+                yPos = addSectionHeading(yPos, "Producers", colors.blue, colors.white)
+                for _, p in ipairs(producers) do
+                    yPos = addMonitorLabel(yPos, p.name, p.rate, colors.lime)
+                end
+                yPos = addTotalLabel(yPos, "Total: " .. util.formatNumber(totalProducerRate) .. " FE/t", colors.green)
+
+                -- Add labels for consumers
+                yPos = yPos + 1     -- Optional: Add a space between sections
+                yPos = addSectionHeading(yPos, "Consumers", colors.blue, colors.white)
+                for _, c in ipairs(consumers) do
+                    yPos = addMonitorLabel(yPos, c.name, c.rate, colors.red)
+                end
+                yPos = addTotalLabel(yPos, "Total: " .. util.formatNumber(totalConsumerRate) .. " FE/t", colors.red)
+
+                sleep(UPDATE_INTERVAL)     -- Refresh the GUI periodically
             end
+        end
     end
 
     local peripheralPollingThread = monitorFrame:addThread()
