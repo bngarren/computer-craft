@@ -135,7 +135,7 @@ local function run()
 
     -- GUI Setup
     local monitorFrame = basalt.addMonitor():setMonitor(peripheral.getName(monitor))
-    monitorFrame.setTextScale(0.5)
+    monitor.setTextScale(0.5)
     local mainGuiFrame, pausedFrame = monitorFrame:addFrame(), monitorFrame:addFrame():hide()
     local energyMonitorLabels = {}
 
