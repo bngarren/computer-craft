@@ -31,7 +31,7 @@ local function sendEnergyRate(receiverId, val)
         energyType = settings.get("type") or "",
         payload = val
     }
-    print("Computer #"..os.getComputerID().." ("..data.name..") sent energy rate of "..util.formatNumber(payload).." to 'master' on computer #" .. receiverId)
+    print("Computer #"..os.getComputerID().." ("..data.name..") sent energy rate of "..util.formatNumber(val).." to 'master' on computer #" .. receiverId)
     util.sendData(receiverId, data, NETWORK_PROTOCOL)
 end
 
