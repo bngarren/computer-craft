@@ -228,7 +228,7 @@ local function run()
                 table.sort(consumers, function(a, b) return a.name < b.name end)
 
                 -- Add labels for producers
-                yPos = addSectionHeading(yPos, "Producers", colors.blue, colors.white)
+                yPos = addSectionHeading(yPos, "Producers", colors.gray, colors.white)
                 for _, p in ipairs(producers) do
                     yPos = addMonitorLabel(yPos, p.name, p.rate, colors.lime)
                 end
@@ -236,7 +236,7 @@ local function run()
 
                 -- Add labels for consumers
                 yPos = yPos + 1     -- Optional: Add a space between sections
-                yPos = addSectionHeading(yPos, "Consumers", colors.blue, colors.white)
+                yPos = addSectionHeading(yPos, "Consumers", colors.gray, colors.white)
                 for _, c in ipairs(consumers) do
                     yPos = addMonitorLabel(yPos, c.name, c.rate, colors.red)
                 end
