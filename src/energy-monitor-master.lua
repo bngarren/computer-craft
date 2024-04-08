@@ -186,7 +186,7 @@ local function run()
         mainGuiFrame
             :addLabel()
             :setText("Energy Monitors")
-            :setPosition(1, 1)
+            :setPosition("parent.w/2 - 7", 1)
             :setSize("parent.w", 1)
             :setBackground(colors.black)
             :setForeground(colors.blue)
