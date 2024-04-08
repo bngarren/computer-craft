@@ -172,7 +172,7 @@ local function run()
         local text = name .. ": " .. util.formatNumber(rate) .. " FE/t"
         local label = mainGuiFrame:addLabel()
             :setText(text)
-            :setPosition(1, yPos)
+            :setPosition(2, yPos)
             :setSize("parent.w", 1)
             :setForeground(textColor)
         table.insert(energyMonitorLabels, label)
