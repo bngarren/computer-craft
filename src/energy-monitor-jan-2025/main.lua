@@ -26,10 +26,10 @@ local function monitor_energy()
             print(percentFill .. "%")
 
             -- Redstone control logic
-            if percentFill >= 80 then
+            if percentFill >= config.threshold_high then
                 redstone.setOutput(config.threshold_signal_side, true)
                 thresholdSignal = true
-            elseif percentFill < 50 and thresholdSignal then
+            elseif percentFill < config.threshold_low and thresholdSignal then
                 redstone.setOutput(config.threshold_signal_side, false)
                 thresholdSignal = false
             end
