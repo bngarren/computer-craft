@@ -1,5 +1,11 @@
 {
-    "version": "1.0",
-    "description": "Monitors a energy storage and provides redstone output based on thresholds of fill percent",
-    "files": ["main.lua", "ppm.lua", "startup.lua", "util.lua", "config.lua"]
+  "version": "1.0.0",
+  "description": "Monitors a energy storage and provides redstone output based on thresholds of fill percent",
+  "files": [
+    "main.lua",
+    "ppm.lua",
+    "startup.lua",
+    "util.lua",
+    "config.lua"
+  ]
 }
