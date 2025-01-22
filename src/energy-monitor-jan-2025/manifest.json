@@ -1,5 +1,5 @@
 {
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Monitors a energy storage and provides redstone output based on thresholds of fill percent",
   "files": [
     "main.lua",
