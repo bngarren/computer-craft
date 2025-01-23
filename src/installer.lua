@@ -1,20 +1,11 @@
 -- GitHub Repository Script Installer for ComputerCraft
 -- Author: Ben Garren
 -- Repository URL: https://github.com/bngarren/computer-craft
--- Last Updated: 01/20/2025
+-- Last Updated: 01/23/2025
 
 local installRootDir = "/bng"
 
-local function coloredWrite(text, color)
-    if term and term.isColor() then
-        local defaultColor = term.getTextColor()
-        term.setTextColor(color)
-        print(text)
-        term.setTextColor(defaultColor)
-    else
-        print(text)
-    end
-end
+local coloredWrite = require("util").coloredWrite
 
 -- Get command line arguments
 local args = {...}
