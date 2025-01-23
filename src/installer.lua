@@ -16,17 +16,69 @@ local function coloredWrite(text, color)
     end
 end
 
--- Get command line argument for subdirectory
+-- Get command line arguments
 local args = {...}
 if #args < 1 then
-    coloredWrite("Usage: installer <subdirectory> | installer status", colors.red)
+    coloredWrite("Usage: installer <programName> [--version]", colors.red)
     return
 end
 
-local subdirectory = args[1]
-local installDir = installRootDir .. "/" .. subdirectory .. "/"
-local baseURL = "https://raw.githubusercontent.com/bngarren/computer-craft/master/src/" .. subdirectory .. "/"
+local programName = args[1]
+local installDir = installRootDir .. "/" .. programName .. "/"
+local baseURL = "https://raw.githubusercontent.com/bngarren/computer-craft/master/src/" .. programName .. "/"
+local manifestURL = baseURL .. "manifest.json"
 local installManifestFile = installDir .. "install_manifest.json"
+
+-- Function to fetch remote manifest.json
+local function fetchRemoteManifest()
+    if not http then
+        coloredWrite("HTTP API is disabled. Cannot fetch remote manifest.", colors.red)
+        return nil
+    end
+    
+    local response = http.get(manifestURL)
+    if not response then
+        coloredWrite("Failed to retrieve remote manifest.json.", colors.red)
+        return nil
+    end
+
+    local content = response.readAll()
+    response.close()
+
+    local manifest = textutils.unserializeJSON(content)
+    if not manifest or not manifest.files or not manifest.version then
+        coloredWrite("Invalid remote manifest.json structure.", colors.red)
+        return nil
+    end
+
+    return manifest
+end
+
+-- Check for the --version flag
+if #args > 1 and args[2] == "--version" then
+    if fs.exists(installManifestFile) then
+        local file = fs.open(installManifestFile, "r")
+        local data = textutils.unserializeJSON(file.readAll())
+        file.close()
+        coloredWrite("Installed Program: " .. (data.program or "Unknown"), colors.white)
+        coloredWrite("Installed Version: " .. (data.version or "Unknown"), colors.lightBlue)
+        coloredWrite("Installation Date: " .. (data.date or "Unknown"), colors.lightGray)
+    else
+        coloredWrite("No installation manifest found for '" .. programName .. "'.", colors.red)
+    end
+    return
+end
+
+-- Fetch remote manifest
+local manifest = fetchRemoteManifest()
+if not manifest then return end
+
+local files = manifest.files
+
+-- Ensure install directory exists
+if not fs.exists(installDir) then fs.makeDir(installDir) end
+
+local newFiles, updatedFiles = {}, {}
 
 -- Function to download a file with retries
 local function downloadFile(url, filename, attempts)
@@ -39,49 +91,7 @@ local function downloadFile(url, filename, attempts)
     return false
 end
 
--- Handle status command
-if subdirectory == "status" then
-    if fs.exists(installManifestFile) then
-        local file = fs.open(installManifestFile, "r")
-        local data = textutils.unserializeJSON(file.readAll())
-        file.close()
-        coloredWrite("Installed Program: " .. (data.program or "Unknown"), colors.white)
-        coloredWrite("Installed Version: " .. (data.version or "Unknown"), colors.lightBlue)
-        coloredWrite("Installation Date: " .. (data.date or "Unknown"), colors.lightGray)
-    else
-        coloredWrite("No installation manifest found.", colors.red)
-    end
-    return
-end
-
--- Ensure install directory exists
-if not fs.exists(installDir) then fs.makeDir(installDir) end
-
--- Download manifest.json
-local manifestURL = baseURL .. "manifest.json"
-local manifestFile = installDir .. "manifest.json"
-if not downloadFile(manifestURL, manifestFile) then
-    coloredWrite("Error: No manifest.json found in " .. baseURL, colors.red)
-    return
-end
-
--- Read manifest.json
-local file = fs.open(manifestFile, "r")
-local content = file.readAll()
-file.close()
-
-local manifest = textutils.unserializeJSON(content)
-if not manifest or not manifest.files then
-    coloredWrite("Error: Invalid manifest.json structure", colors.red)
-    return
-end
-
-local files = manifest.files
-coloredWrite("Manifest found, containing " .. #files .. " files.", colors.white)
-
-local newFiles, updatedFiles = {}, {}
-
--- Download and update files
+-- Download and update files based on remote manifest
 for _, filename in ipairs(files) do
     local fileURL = baseURL .. filename
     local filePath = installDir .. filename
@@ -102,7 +112,7 @@ end
 
 -- Write installation manifest
 local installManifest = {
-    program = subdirectory,
+    program = programName,
     version = manifest.version,
     date = os.date("%Y-%m-%d %H:%M:%S")
 }
@@ -110,43 +120,56 @@ local imFile = fs.open(installManifestFile, "w")
 imFile.write(textutils.serializeJSON(installManifest))
 imFile.close()
 
--- Generate a startup.lua in the program directory
+-- Generate a startup.lua in the program directory with update checking
 local startupContent = [[
-local manifestPath = "]] .. installDir .. [[manifest.json"
+local manifestPath = "]] .. installManifestFile .. [["
 local baseURL = "]] .. baseURL .. [["
 local manifestURL = baseURL .. "manifest.json"
 local mainScript = "]] .. installDir .. [[main.lua"
 
--- Function to check for updates
-local function checkForUpdates()
-    if not http then return end
-    if not fs.exists(manifestPath) then return end
+local function fetchRemoteVersion()
+    if not http then return nil end
+    local response = http.get(manifestURL)
+    if not response then return nil end
+    local content = response.readAll()
+    response.close()
+    local manifest = textutils.unserializeJSON(content)
+    return manifest and manifest.version or nil
+end
 
+local function fetchLocalVersion()
+    if not fs.exists(manifestPath) then return nil end
     local file = fs.open(manifestPath, "r")
-    local localManifest = textutils.unserializeJSON(file.readAll())
+    local manifest = textutils.unserializeJSON(file.readAll())
     file.close()
+    return manifest and manifest.version or nil
+end
 
-    local request = http.get(manifestURL)
-    if not request then return end
-    local remoteManifest = textutils.unserializeJSON(request.readAll())
-    request.close()
+local function checkForUpdates()
+    local localVersion = fetchLocalVersion()
+    local remoteVersion = fetchRemoteVersion()
 
-    if remoteManifest.version ~= localManifest.version then
-        print("A new version (" .. remoteManifest.version .. ") is available.")
+    if not localVersion or not remoteVersion then return end
+
+    if remoteVersion ~= localVersion then
+        print("A new version (" .. remoteVersion .. ") is available.")
         print("Do you want to update? (y/n)")
         local choice = read()
         if choice:lower() == "y" then
-            shell.run("installer.lua", "]] .. subdirectory .. [[")
+            shell.run("installer.lua", "]] .. programName .. [[")
             os.reboot()
         end
-    else
-        print("Up to date. v" .. localManifest.version)
     end
 end
 
--- Run update check, then start the program
+-- Run update check before launching program
 checkForUpdates()
-shell.run(mainScript)
+
+if fs.exists(mainScript) then
+    shell.run(mainScript)
+else
+    print("Error: main.lua not found in " .. mainScript)
+end
 ]]
 
 local startupFile = fs.open(installDir .. "startup.lua", "w")
@@ -154,7 +177,7 @@ startupFile.write(startupContent)
 startupFile.close()
 coloredWrite("Generated startup.lua with update checker.", colors.lime)
 
--- Prompt user to overwrite global startup.lua
+-- Prompt user before overwriting global startup.lua
 local globalStartupPath = "/startup.lua"
 local programStartupPath = installDir .. "startup.lua"
 
@@ -166,33 +189,8 @@ if fs.exists(globalStartupPath) then
         fs.delete(globalStartupPath)
         fs.copy(programStartupPath, globalStartupPath)
         coloredWrite("startup.lua has been updated to run this program on startup.", colors.lime)
-    else
-        coloredWrite("Keeping existing startup.lua. You can run this program manually:", colors.white)
-        coloredWrite("cd " .. installDir .. " && startup.lua", colors.lightBlue)
     end
 else
     fs.copy(programStartupPath, globalStartupPath)
     coloredWrite("Created new startup.lua to launch the program at startup.", colors.lime)
 end
-
--- Print summary
-coloredWrite("\nInstallation Summary:", colors.lime)
-coloredWrite("Repo: " .. baseURL, colors.white)
-coloredWrite("Program: " .. subdirectory, colors.white)
-
-if manifest.version then
-    coloredWrite("Version: " .. manifest.version, colors.lightBlue)
-end
-if manifest.description then
-    coloredWrite("Description: " .. manifest.description, colors.lightGray)
-end
-
-coloredWrite("New Files:", colors.yellow)
-if #newFiles == 0 then print("  none") end
-for _, file in ipairs(newFiles) do print("  + " .. file) end
-
-coloredWrite("Updated Files:", colors.cyan)
-if #updatedFiles == 0 then print("  none") end
-for _, file in ipairs(updatedFiles) do print("  * " .. file) end
-
-coloredWrite("Installation complete.", colors.lime)
