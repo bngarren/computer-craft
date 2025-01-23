@@ -3,7 +3,7 @@
 
 
 local config = {
-    sample_rate = 5,
+    sample_rate = 4,
     threshold_low = 60,
     threshold_high = 90,
     threshold_signal_side = "back",
