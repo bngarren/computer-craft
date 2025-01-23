@@ -36,14 +36,15 @@ local function fetchRemoteManifest()
         return nil
     end
     
-    local response = http.get(manifestURL)
-    if not response then
+    local headers = { ["Cache-Control"] = "no-cache, no-store, must-revalidate" }
+    local request = http.get({ url = manifestURL, headers = headers })
+    if not request then
         coloredWrite("Failed to retrieve remote manifest.json.", colors.red)
         return nil
     end
 
-    local content = response.readAll()
-    response.close()
+    local content = request.readAll()
+    request.close()
 
     local manifest = textutils.unserializeJSON(content)
     if not manifest or not manifest.files or not manifest.version then
@@ -129,10 +130,11 @@ local mainScript = "]] .. installDir .. [[main.lua"
 
 local function fetchRemoteVersion()
     if not http then return nil end
-    local response = http.get(manifestURL)
-    if not response then return nil end
-    local content = response.readAll()
-    response.close()
+    local headers = { ["Cache-Control"] = "no-cache, no-store, must-revalidate" }
+    local request = http.get({ url = manifestURL, headers = headers })
+    if not request then return nil end
+    local content = request.readAll()
+    request.close()
     local manifest = textutils.unserializeJSON(content)
     return manifest and manifest.version or nil
 end
@@ -148,6 +150,9 @@ end
 local function checkForUpdates()
     local localVersion = fetchLocalVersion()
     local remoteVersion = fetchRemoteVersion()
+
+    print("Local version: " .. localVersion)
+    print("Remote version: " .. remoteVersion)
 
     if not localVersion or not remoteVersion then return end
 
