@@ -6,6 +6,23 @@ local config = require("config")
 local util = require("util")
 local coloredWrite = util.coloredWrite
 
+
+local args = {...}
+if #args > 0 and args[1] == "--version" then
+    local installManifestPath = shell.dir() .. "/install_manifest.json"
+    if fs.exists(installManifestPath) then
+        local file = fs.open(installManifestPath, "r")
+        local data = textutils.unserializeJSON(file.readAll())
+        file.close()
+        coloredWrite("Installed Program: " .. (data.program or "Unknown"), colors.white)
+        coloredWrite("Installed Version: " .. (data.version or "Unknown"), colors.lightBlue)
+        coloredWrite("Installation Date: " .. (data.date or "Unknown"), colors.lightGray)
+    else
+        coloredWrite("No installation manifest found.", colors.red)
+    end
+    return 0
+end
+
 -- Mount peripherals
 ppm.mount_all()
 
@@ -43,19 +60,5 @@ local function monitor_energy()
     end
 end
 
-local args = {...}
-if #args > 0 and args[1] == "--version" then
-    if fs.exists("./install_manifest.json") then
-        local file = fs.open("./install_manifest.json", "r")
-        local data = textutils.unserializeJSON(file.readAll())
-        file.close()
-        coloredWrite("Installed Program: " .. (data.program or "Unknown"), colors.white)
-        coloredWrite("Installed Version: " .. (data.version or "Unknown"), colors.lightBlue)
-        coloredWrite("Installation Date: " .. (data.date or "Unknown"), colors.lightGray)
-    else
-        coloredWrite("No installation manifest found.", colors.red)
-    end
-    return 0
-end
 
 monitor_energy()

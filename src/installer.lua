@@ -1,192 +1,125 @@
 -- GitHub Repository Script Installer for ComputerCraft
 -- Author: Ben Garren
--- Repository URL: https://github.com/bngarren/computer-craft
 -- Last Updated: 01/23/2025
 
-local installRootDir = "/bng"
+-- Define repository URLs
+local repo_url_base = "https://raw.githubusercontent.com/bngarren/computer-craft/main/src"
+local repo_url_common = repo_url_base .. "/common"
+local installRootPath = "/bng"
+local installCommonPath = installRootPath .. "/common"
+local installProgramsPath = installRootPath .. "/programs"
+local commonManifestFile = installCommonPath .. "/common_manifest.json"
 
-local coloredWrite = require("util").coloredWrite
+-- Function to download a file
+local function downloadFile(url, filePath)
+    local response = http.get(url)
+    if not response then
+        print("Error downloading:", filePath)
+        return false
+    end
+    local file = fs.open(filePath, "w")
+    file.write(response.readAll())
+    file.close()
+    return true
+end
+
+-- Function to fetch and parse remote JSON manifests
+local function fetchRemoteJSON(url)
+    local response = http.get(url)
+    if not response then return nil end
+    local content = response.readAll()
+    response.close()
+    return textutils.unserializeJSON(content)
+end
+
+-- Ensure common directory exists
+if not fs.exists(installCommonPath) then fs.makeDir(installCommonPath) end
 
 -- Get command line arguments
 local args = {...}
 if #args < 1 then
-    coloredWrite("Usage: installer <programName> [--version]", colors.red)
+    print("Usage: installer <programName> [--version]")
     return
 end
 
 local programName = args[1]
-local installDir = installRootDir .. "/" .. programName .. "/"
-local baseURL = "https://raw.githubusercontent.com/bngarren/computer-craft/master/src/" .. programName .. "/"
-local manifestURL = baseURL .. "manifest.json"
+local installDir = installProgramsPath .. "/" .. programName .. "/"
+local programURL = repo_url_base .. "/programs/" .. programName .. "/"
+local manifestURL = programURL .. "manifest.json"
 local installManifestFile = installDir .. "install_manifest.json"
 
--- Function to fetch remote manifest.json
-local function fetchRemoteManifest()
-    if not http then
-        coloredWrite("HTTP API is disabled. Cannot fetch remote manifest.", colors.red)
-        return nil
-    end
-    
-    local headers = { ["Cache-Control"] = "no-cache, no-store, must-revalidate" }
-    local request = http.get({ url = manifestURL, headers = headers })
-    if not request then
-        coloredWrite("Failed to retrieve remote manifest.json.", colors.red)
-        return nil
-    end
-
-    local content = request.readAll()
-    request.close()
-
-    local manifest = textutils.unserializeJSON(content)
-    if not manifest or not manifest.files or not manifest.version then
-        coloredWrite("Invalid remote manifest.json structure.", colors.red)
-        return nil
-    end
-
-    return manifest
-end
-
--- Check for the --version flag
-if #args > 1 and args[2] == "--version" then
-    if fs.exists(installManifestFile) then
-        local file = fs.open(installManifestFile, "r")
-        local data = textutils.unserializeJSON(file.readAll())
-        file.close()
-        coloredWrite("Installed Program: " .. (data.program or "Unknown"), colors.white)
-        coloredWrite("Installed Version: " .. (data.version or "Unknown"), colors.lightBlue)
-        coloredWrite("Installation Date: " .. (data.date or "Unknown"), colors.lightGray)
-    else
-        coloredWrite("No installation manifest found for '" .. programName .. "'.", colors.red)
-    end
+-- Fetch remote program manifest
+local manifest = fetchRemoteJSON(manifestURL)
+if not manifest then
+    print("Failed to retrieve manifest for:", programName)
     return
 end
 
--- Fetch remote manifest
-local manifest = fetchRemoteManifest()
-if not manifest then return end
-
-local files = manifest.files
-
--- Ensure install directory exists
-if not fs.exists(installDir) then fs.makeDir(installDir) end
-
-local newFiles, updatedFiles = {}, {}
-
--- Function to download a file with retries
-local function downloadFile(url, filename, attempts)
-    attempts = attempts or 3
-    for i = 1, attempts do
-        if shell.run("wget", url, filename) then return true end
-        coloredWrite("Download failed, retrying... (" .. i .. "/" .. attempts .. ")", colors.red)
-        os.sleep(2)
+-- **✅ Handling Dependencies (Common Modules)**
+local function installDependencies(dependencies)
+    -- Fetch remote common manifest
+    local remoteCommonManifest = fetchRemoteJSON(repo_url_common .. "/common_manifest.json")
+    if not remoteCommonManifest then
+        print("Failed to retrieve common module manifest.")
+        return
     end
-    return false
+
+    -- Fetch local common manifest (if exists)
+    local localCommonManifest = {}
+    if fs.exists(commonManifestFile) then
+        local file = fs.open(commonManifestFile, "r")
+        localCommonManifest = textutils.unserializeJSON(file.readAll())
+        file.close()
+    end
+
+    for moduleName, moduleInfo in pairs(dependencies) do
+        local modulePath = installCommonPath .. "/" .. moduleName .. ".lua"
+        local remoteVersion = moduleInfo.version
+        local localVersion = localCommonManifest[moduleName]
+
+        if not fs.exists(modulePath) or (localVersion ~= remoteVersion) then
+            print("Updating module:", moduleName, "(v" .. remoteVersion .. ")")
+            local moduleURL = repo_url_common .. "/" .. moduleName .. ".lua"
+            if downloadFile(moduleURL, modulePath) then
+                localCommonManifest[moduleName] = remoteVersion
+            end
+        end
+    end
+
+    -- Save updated local common manifest
+    local file = fs.open(commonManifestFile, "w")
+    file.write(textutils.serializeJSON(localCommonManifest))
+    file.close()
 end
 
--- Download and update files based on remote manifest
-for _, filename in ipairs(files) do
-    local fileURL = baseURL .. filename
+-- Install dependencies first
+if manifest.dependencies then
+    installDependencies(manifest.dependencies)
+end
+
+-- **✅ Handling Program Files (Main Program & Configs)**
+if not fs.exists(installDir) then fs.makeDir(installDir) end
+
+for _, filename in ipairs(manifest.files) do
+    local fileURL = programURL .. filename
     local filePath = installDir .. filename
 
+    -- **Skip config.lua if it already exists (preserve user settings)**
     if filename == "config.lua" and fs.exists(filePath) then
-        coloredWrite("Skipping " .. filename .. " to preserve user settings.", colors.yellow)
+        print("Skipping", filename, "(preserving user settings)")
     else
-        local exists = fs.exists(filePath)
-        if exists then
-            table.insert(updatedFiles, filePath)
-            fs.delete(filePath)
-        else
-            table.insert(newFiles, filePath)
-        end
         downloadFile(fileURL, filePath)
     end
 end
 
--- Write installation manifest
+-- **✅ Store Installation Info**
 local installManifest = {
     program = programName,
     version = manifest.version,
     date = os.date("%Y-%m-%d %H:%M:%S")
 }
-local imFile = fs.open(installManifestFile, "w")
-imFile.write(textutils.serializeJSON(installManifest))
-imFile.close()
+local file = fs.open(installManifestFile, "w")
+file.write(textutils.serializeJSON(installManifest))
+file.close()
 
--- Generate a startup.lua in the program directory with update checking
-local startupContent = [[
-local manifestPath = "]] .. installManifestFile .. [["
-local baseURL = "]] .. baseURL .. [["
-local manifestURL = baseURL .. "manifest.json"
-local mainScript = "]] .. installDir .. [[main.lua"
-
-local function fetchRemoteVersion()
-    if not http then return nil end
-    local headers = { ["Cache-Control"] = "no-cache, no-store, must-revalidate" }
-    local request = http.get({ url = manifestURL, headers = headers })
-    if not request then return nil end
-    local content = request.readAll()
-    request.close()
-    local manifest = textutils.unserializeJSON(content)
-    return manifest and manifest.version or nil
-end
-
-local function fetchLocalVersion()
-    if not fs.exists(manifestPath) then return nil end
-    local file = fs.open(manifestPath, "r")
-    local manifest = textutils.unserializeJSON(file.readAll())
-    file.close()
-    return manifest and manifest.version or nil
-end
-
-local function checkForUpdates()
-    local localVersion = fetchLocalVersion()
-    local remoteVersion = fetchRemoteVersion()
-
-    print("Local version: " .. localVersion)
-    print("Remote version: " .. remoteVersion)
-
-    if not localVersion or not remoteVersion then return end
-
-    if remoteVersion ~= localVersion then
-        print("A new version (" .. remoteVersion .. ") is available.")
-        print("Do you want to update? (y/n)")
-        local choice = read()
-        if choice:lower() == "y" then
-            shell.run("installer.lua", "]] .. programName .. [[")
-            os.reboot()
-        end
-    end
-end
-
--- Run update check before launching program
-checkForUpdates()
-
-if fs.exists(mainScript) then
-    shell.run(mainScript)
-else
-    print("Error: main.lua not found in " .. mainScript)
-end
-]]
-
-local startupFile = fs.open(installDir .. "startup.lua", "w")
-startupFile.write(startupContent)
-startupFile.close()
-coloredWrite("Generated startup.lua with update checker.", colors.lime)
-
--- Prompt user before overwriting global startup.lua
-local globalStartupPath = "/startup.lua"
-local programStartupPath = installDir .. "startup.lua"
-
-if fs.exists(globalStartupPath) then
-    coloredWrite("A startup.lua script already exists.", colors.yellow)
-    coloredWrite("Do you want to overwrite it to launch this program at startup? (y/n)", colors.orange)
-    local choice = read()
-    if choice:lower() == "y" then
-        fs.delete(globalStartupPath)
-        fs.copy(programStartupPath, globalStartupPath)
-        coloredWrite("startup.lua has been updated to run this program on startup.", colors.lime)
-    end
-else
-    fs.copy(programStartupPath, globalStartupPath)
-    coloredWrite("Created new startup.lua to launch the program at startup.", colors.lime)
-end
+print("Installed '" .. programName .. "' successfully.")
