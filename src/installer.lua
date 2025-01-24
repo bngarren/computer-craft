@@ -38,6 +38,17 @@ local function updateLocalManifest(moduleName, version)
     file.close()
 end
 
+local isForceUpdate = false
+local args = {...}
+
+-- Check if --force flag is present
+for _, arg in ipairs(args) do
+    if arg == "--force" then
+        isForceUpdate = true
+        print("Installer: Force update mode enabled. All common modules will be overwritten.")
+    end
+end
+
 -- Function to download a module if missing or out-of-date
 -- Ensure `common_manifest.json` is up to date when downloading modules
 local function ensureModuleExists(moduleName, remoteCommonManifest)
@@ -142,9 +153,9 @@ if not remoteProgramManifest then
     return
 end
 
--- Install Dependencies
+-- Install Dependencies (Pass `isForceUpdate` to moduleManager)
 if remoteProgramManifest.dependencies then
-    local result = moduleManager.ensureModules(remoteProgramManifest.dependencies)
+    local result = moduleManager.ensureModules(remoteProgramManifest.dependencies, isForceUpdate)
     if not result then return 1 end
 end
 

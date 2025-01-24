@@ -20,7 +20,7 @@ local function fetchCommonManifest()
 end
 
 -- Install or update modules (while respecting installer updates)
-function moduleManager.ensureModules(dependencies)
+function moduleManager.ensureModules(dependencies, forceUpdate)
     if not fs.exists(installPath) then fs.makeDir(installPath) end
 
     local remoteManifest = fetchCommonManifest()
@@ -58,19 +58,17 @@ function moduleManager.ensureModules(dependencies)
             end
         end
 
-        -- Skip modules that were already updated by the installer
-        if fs.exists(modulePath) and localVersion == remoteVersion then
+        -- **✅ Skip version check if forceUpdate is enabled**
+        if not forceUpdate and fs.exists(modulePath) and localVersion == remoteVersion then
             print("Module Manager: Module already up to date (" .. moduleName .. " v" .. localVersion .. ")")
         else
-            if not fs.exists(modulePath) then
-                print("Module Manager: Installing module:", moduleName, " v" .. remoteVersion)
+            if forceUpdate then
+                print("Module Manager: Force updating module:", moduleName, " v" .. tostring(localVersion) .. " → v" .. remoteVersion)
             else
-                print("Module Manager: Updating module:", moduleName, " v" .. tostring(localVersion) .. " to v" .. tostring(remoteVersion))
+                print("Module Manager: Updating module:", moduleName, " v" .. tostring(localVersion) .. " → v" .. remoteVersion)
             end
             local moduleURL = remoteCommonURL .. moduleName .. ".lua"
-            local headers = { ["Cache-Control"] = "no-cache, no-store, must-revalidate" }
-            local request = http.get({ url = moduleURL, headers = headers })
-
+            local request = http.get({ url = moduleURL })
             if not request then
                 print("Module Manager: Failed to download module:", moduleName)
                 return false
