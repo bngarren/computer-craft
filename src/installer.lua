@@ -29,12 +29,12 @@ local function fetchRemoteCommonManifest()
     return textutils.unserializeJSON(content)
 end
 
--- Function to download a module if missing
--- This is used in this installer to download the common modules necessary to bootstrap the installation
+-- Function to download a module if missing or out-of-date
 -- Ensure `common_manifest.json` is up to date when downloading modules
 local function ensureModuleExists(moduleName, remoteCommonManifest)
     local modulePath = installCommonPath .. "/" .. moduleName .. ".lua"
     local remoteVersion = remoteCommonManifest[moduleName]
+    local localManifest = fs.exists(localManifestFile) and textutils.unserializeJSON(fs.open(localManifestFile, "r").readAll()) or {}
 
     if not remoteVersion then
         print("Installer: Error - No version info for", moduleName)
@@ -44,7 +44,19 @@ local function ensureModuleExists(moduleName, remoteCommonManifest)
     if not fs.exists(modulePath) then
         print("Installer: Downloading missing module:", moduleName, " v" .. remoteVersion)
     else
-        print("Installer: Updating module:", moduleName, "to v" .. remoteVersion)
+        if localManifest then
+            local localVersion = localManifest[moduleName]
+            if localVersion ~= remoteVersion then
+                print("Installer: Updating module:", moduleName, " v" .. localVersion .. " to v" .. remoteVersion)
+            else
+                print("Installer: Module is up-to-date:", moduleName, " v" .. remoteVersion)
+                return
+            end
+        else
+            print("Installer: Error - can't find local common_manifest.json file!")
+            return
+        end
+        
     end
 
     local url = repo_url_common .. "/" .. moduleName .. ".lua"
