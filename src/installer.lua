@@ -85,6 +85,9 @@ if remoteCommonManifest then
         print("Installer: FATAL - Required core modules missing. Installation cannot proceed.")
         return false
     end
+    if not ensureModuleExists("status", remoteCommonManifest) then
+        print("Installer: WARNING - Could not install status.lua")
+    end
 end
 
 -- Require installed modules

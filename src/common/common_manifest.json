@@ -3,5 +3,6 @@
     "util": "1.0.0",
     "logger": "1.0.0",
     "updater": "1.0.0",
-    "module_manager": "1.0.0"
+    "module_manager": "1.0.0",
+    "status": "1.0.0"
 }
