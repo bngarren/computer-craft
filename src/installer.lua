@@ -129,25 +129,25 @@ end
 local programName = args[1]
 local installDir = installProgramsPath .. "/" .. programName .. "/"
 local programURL = repo_url_base .. "/programs/" .. programName .. "/"
-local manifestURL = programURL .. "manifest.json"
+local programManifestURL = programURL .. "manifest.json"
 local installManifestFile = installDir .. "install_manifest.json"
 
 -- Fetch remote program manifest
-local remoteManifest = fetchRemoteJSON(manifestURL)
-if not remoteManifest then
+local remoteProgramManifest = fetchRemoteJSON(programManifestURL)
+if not remoteProgramManifest then
     print("Installer: Failed to retrieve manifest for:", programName)
     return
 end
 
 -- Install Dependencies
-if remoteManifest.dependencies then
-    moduleManager.ensureModules(remoteManifest.dependencies)
+if remoteProgramManifest.dependencies then
+    moduleManager.ensureModules(remoteProgramManifest.dependencies)
 end
 
 -- Install Program Files
 if not fs.exists(installDir) then fs.makeDir(installDir) end
 
-for _, filename in ipairs(remoteManifest.files) do
+for _, filename in ipairs(remoteProgramManifest.files) do
     local fileURL = programURL .. filename
     local filePath = installDir .. filename
 
@@ -161,9 +161,9 @@ end
 -- Store Installation Info
 local installManifest = {
     program = programName,
-    version = remoteManifest.version,
-    files = remoteManifest.files,
-    dependencies = remoteManifest.dependencies,
+    version = remoteProgramManifest.version,
+    files = remoteProgramManifest.files,
+    dependencies = remoteProgramManifest.dependencies,
     date = os.date("%Y-%m-%d %H:%M:%S")
 }
 local file = fs.open(installManifestFile, "w")
