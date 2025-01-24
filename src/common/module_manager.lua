@@ -7,7 +7,8 @@ local localManifestFile = installPath .. "common_manifest.json"
 
 -- Fetch remote common manifest
 local function fetchCommonManifest()
-    local request = http.get(remoteCommonManifestURL)
+    local headers = { ["Cache-Control"] = "no-cache, no-store, must-revalidate" }
+    local request = http.get({ url = remoteCommonManifestURL, headers = headers })
     if not request then
         print("Error: Failed to retrieve common manifest.")
         return nil
@@ -39,7 +40,8 @@ function moduleManager.ensureModules(dependencies)
         if not fs.exists(modulePath) or localVersion ~= remoteVersion then
             print("Updating module:", moduleName, "to v" .. remoteVersion)
             local moduleURL = remoteCommonURL .. moduleName .. ".lua"
-            local request = http.get(moduleURL)
+            local headers = { ["Cache-Control"] = "no-cache, no-store, must-revalidate" }
+            local request = http.get({ url = moduleURL, headers = headers })
 
             if request then
                 local content = request.readAll()

@@ -21,7 +21,8 @@ local function ensureModuleExists(moduleName)
     if not fs.exists(modulePath) then
         print("Downloading missing module:", moduleName)
         local url = repo_url_common .. "/" .. moduleName .. ".lua"
-        local response = http.get(url)
+        local headers = { ["Cache-Control"] = "no-cache, no-store, must-revalidate" }
+        local response = http.get({ url = url, headers = headers })
         if response then
             local file = fs.open(modulePath, "w")
             file.write(response.readAll())
@@ -43,7 +44,8 @@ local updater = require("updater")
 
 -- Function to download a file
 local function downloadFile(url, filePath)
-    local response = http.get(url)
+    local headers = { ["Cache-Control"] = "no-cache, no-store, must-revalidate" }
+    local response = http.get({ url = url, headers = headers })
     if not response then
         print("Error downloading:", filePath)
         return false
@@ -56,7 +58,8 @@ end
 
 -- Function to fetch and parse remote JSON manifests
 local function fetchRemoteJSON(url)
-    local response = http.get(url)
+    local headers = { ["Cache-Control"] = "no-cache, no-store, must-revalidate" }
+    local response = http.get({ url = url, headers = headers })
     if not response then return nil end
     local content = response.readAll()
     response.close()
