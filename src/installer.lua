@@ -29,6 +29,15 @@ local function fetchRemoteCommonManifest()
     return textutils.unserializeJSON(content)
 end
 
+-- Function to update local `common_manifest.json`
+local function updateLocalManifest(moduleName, version)
+    local localManifest = fs.exists(localManifestFile) and textutils.unserializeJSON(fs.open(localManifestFile, "r").readAll()) or {}
+    localManifest[moduleName] = version
+    local file = fs.open(localManifestFile, "w")
+    file.write(textutils.serializeJSON(localManifest))
+    file.close()
+end
+
 -- Function to download a module if missing or out-of-date
 -- Ensure `common_manifest.json` is up to date when downloading modules
 local function ensureModuleExists(moduleName, remoteCommonManifest)
@@ -38,7 +47,7 @@ local function ensureModuleExists(moduleName, remoteCommonManifest)
 
     if not remoteVersion then
         print("Installer: Error - No version info for", moduleName)
-        return
+        return false
     end
 
     if not fs.exists(modulePath) then
@@ -50,7 +59,7 @@ local function ensureModuleExists(moduleName, remoteCommonManifest)
                 print("Installer: Updating module:", moduleName, " v" .. localVersion .. " to v" .. remoteVersion)
             else
                 print("Installer: Module is up-to-date:", moduleName, " v" .. remoteVersion)
-                return
+                return true
             end
         else
             print("Installer: Error - can't find local common_manifest.json file!")
@@ -69,22 +78,21 @@ local function ensureModuleExists(moduleName, remoteCommonManifest)
         file.close()
         print("Installer: Successfully installed module:", moduleName)
 
-        -- **✅ Update local `common_manifest.json`**
-        local localManifest = fs.exists(localManifestFile) and textutils.unserializeJSON(fs.open(localManifestFile, "r").readAll()) or {}
-        localManifest[moduleName] = remoteVersion
-        local file = fs.open(localManifestFile, "w")
-        file.write(textutils.serializeJSON(localManifest))
-        file.close()
+        updateLocalManifest(moduleName, remoteVersion)
     else
-        print("Installer: Error downloading module:", moduleName)
+        print("Installer: ERROR downloading module:", moduleName)
+        return false
     end
+    return true
 end
 
 -- Fetch latest remote common manifest before bootstrapping
 local remoteCommonManifest = fetchRemoteCommonManifest()
 if remoteCommonManifest then
-    ensureModuleExists("module_manager", remoteCommonManifest)
-    ensureModuleExists("updater", remoteCommonManifest)
+    if not ensureModuleExists("module_manager", remoteCommonManifest) or not ensureModuleExists("updater", remoteCommonManifest) then
+        print("Installer: FATAL - Required core modules missing. Installation cannot proceed.")
+        return
+    end
 end
 
 -- Require installed modules
@@ -141,7 +149,8 @@ end
 
 -- Install Dependencies
 if remoteProgramManifest.dependencies then
-    moduleManager.ensureModules(remoteProgramManifest.dependencies)
+    local result = moduleManager.ensureModules(remoteProgramManifest.dependencies)
+    if not result then return 1 end
 end
 
 -- Install Program Files
