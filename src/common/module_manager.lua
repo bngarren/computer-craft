@@ -24,7 +24,7 @@ function moduleManager.ensureModules(dependencies)
     if not fs.exists(installPath) then fs.makeDir(installPath) end
 
     local remoteManifest = fetchCommonManifest()
-    if not remoteManifest then return end
+    if not remoteManifest then return false end
 
     local localManifest = fs.exists(localManifestFile) and textutils.unserializeJSON(fs.open(localManifestFile, "r").readAll()) or {}
 
@@ -71,17 +71,18 @@ function moduleManager.ensureModules(dependencies)
             local headers = { ["Cache-Control"] = "no-cache, no-store, must-revalidate" }
             local request = http.get({ url = moduleURL, headers = headers })
 
-            if request then
-                local content = request.readAll()
-                request.close()
-                local file = fs.open(modulePath, "w")
-                file.write(content)
-                file.close()
-                localManifest[moduleName] = remoteVersion
-                print("Module Manager: Successfully added " ..moduleName.." v" ..remoteVersion)
-            else
+            if not request then
                 print("Module Manager: Failed to download module:", moduleName)
+                return false
             end
+
+            local content = request.readAll()
+            request.close()
+            local file = fs.open(modulePath, "w")
+            file.write(content)
+            file.close()
+            localManifest[moduleName] = remoteVersion
+            print("Module Manager: Successfully updated " .. moduleName .. " to v" .. remoteVersion)
         end
     end
 
@@ -89,6 +90,7 @@ function moduleManager.ensureModules(dependencies)
     local file = fs.open(localManifestFile, "w")
     file.write(textutils.serializeJSON(localManifest))
     file.close()
+    return true
 end
 
 return moduleManager

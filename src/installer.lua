@@ -44,6 +44,7 @@ local function ensureModuleExists(moduleName, remoteCommonManifest)
     local modulePath = installCommonPath .. "/" .. moduleName .. ".lua"
     local remoteVersion = remoteCommonManifest[moduleName]
     local localManifest = fs.exists(localManifestFile) and textutils.unserializeJSON(fs.open(localManifestFile, "r").readAll()) or {}
+    local localVersion = localManifest[moduleName]
 
     if not remoteVersion then
         print("Installer: Error - No version info for", moduleName)
@@ -51,38 +52,29 @@ local function ensureModuleExists(moduleName, remoteCommonManifest)
     end
 
     if not fs.exists(modulePath) then
-        print("Installer: Downloading missing module:", moduleName, " v" .. remoteVersion)
+        print("Installer: Installing module:", moduleName, " v" .. remoteVersion)
+    elseif localVersion == remoteVersion then
+        print("Installer: Module is up-to-date:", moduleName, " v" .. remoteVersion)
+        return true
     else
-        if localManifest then
-            local localVersion = localManifest[moduleName]
-            if localVersion ~= remoteVersion then
-                print("Installer: Updating module:", moduleName, " v" .. localVersion .. " to v" .. remoteVersion)
-            else
-                print("Installer: Module is up-to-date:", moduleName, " v" .. remoteVersion)
-                return true
-            end
-        else
-            print("Installer: Error - can't find local common_manifest.json file!")
-            return
-        end
-        
+        print("Installer: Updating module:", moduleName, " v" .. tostring(localVersion) .. " → v" .. remoteVersion)
     end
 
     local url = repo_url_common .. "/" .. moduleName .. ".lua"
     local headers = { ["Cache-Control"] = "no-cache, no-store, must-revalidate" }
     local response = http.get({ url = url, headers = headers })
 
-    if response then
-        local file = fs.open(modulePath, "w")
-        file.write(response.readAll())
-        file.close()
-        print("Installer: Successfully installed module:", moduleName)
-
-        updateLocalManifest(moduleName, remoteVersion)
-    else
+    if not response then
         print("Installer: ERROR downloading module:", moduleName)
         return false
     end
+
+    local file = fs.open(modulePath, "w")
+    file.write(response.readAll())
+    file.close()
+    print("Installer: Successfully installed module:", moduleName)
+
+    updateLocalManifest(moduleName, remoteVersion)
     return true
 end
 
@@ -91,7 +83,7 @@ local remoteCommonManifest = fetchRemoteCommonManifest()
 if remoteCommonManifest then
     if not ensureModuleExists("module_manager", remoteCommonManifest) or not ensureModuleExists("updater", remoteCommonManifest) then
         print("Installer: FATAL - Required core modules missing. Installation cannot proceed.")
-        return
+        return false
     end
 end
 
