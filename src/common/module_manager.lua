@@ -65,7 +65,7 @@ function moduleManager.ensureModules(dependencies)
             if not fs.exists(modulePath) then
                 print("Module Manager: Installing module:", moduleName, " v" .. remoteVersion)
             else
-                print("Module Manager: Updating module:", moduleName, " v" .. tostring(localVersion) .. " → v" .. tostring(remoteVersion))
+                print("Module Manager: Updating module:", moduleName, " v" .. tostring(localVersion) .. " to v" .. tostring(remoteVersion))
             end
             local moduleURL = remoteCommonURL .. moduleName .. ".lua"
             local headers = { ["Cache-Control"] = "no-cache, no-store, must-revalidate" }
@@ -78,6 +78,7 @@ function moduleManager.ensureModules(dependencies)
                 file.write(content)
                 file.close()
                 localManifest[moduleName] = remoteVersion
+                print("Module Manager: Successfully added " ..moduleName.." v" ..remoteVersion)
             else
                 print("Module Manager: Failed to download module:", moduleName)
             end
