@@ -63,9 +63,9 @@ function moduleManager.ensureModules(dependencies, forceUpdate)
             print("Module Manager: Module already up to date (" .. moduleName .. " v" .. localVersion .. ")")
         else
             if forceUpdate then
-                print("Module Manager: Force updating module:", moduleName, " v" .. tostring(localVersion) .. " → v" .. remoteVersion)
+                print("Module Manager: Force updating module:", moduleName, " v" .. tostring(localVersion) .. " to v" .. remoteVersion)
             else
-                print("Module Manager: Updating module:", moduleName, " v" .. tostring(localVersion) .. " → v" .. remoteVersion)
+                print("Module Manager: Updating module:", moduleName, " v" .. tostring(localVersion) .. " to v" .. remoteVersion)
             end
             local moduleURL = remoteCommonURL .. moduleName .. ".lua"
             local request = http.get({ url = moduleURL })
