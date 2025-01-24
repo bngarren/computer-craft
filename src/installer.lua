@@ -8,6 +8,7 @@ local repo_url_common = repo_url_base .. "/common"
 local installRootPath = "/bng"
 local installCommonPath = installRootPath .. "/common"
 local installProgramsPath = installRootPath .. "/programs"
+local localManifestFile = installCommonPath .. "common_manifest.json"
 
 -- Ensure common modules directory exists
 if not fs.exists(installCommonPath) then fs.makeDir(installCommonPath) end
@@ -15,29 +16,64 @@ if not fs.exists(installCommonPath) then fs.makeDir(installCommonPath) end
 -- Add `/bng/common/` to package path so Lua can find required modules
 package.path = installCommonPath .. "/?.lua;" .. package.path
 
+-- Fetch remote common manifest
+local function fetchRemoteCommonManifest()
+    local headers = { ["Cache-Control"] = "no-cache, no-store, must-revalidate" }
+    local request = http.get({ url = repo_url_common .. "/common_manifest.json", headers = headers })
+    if not request then
+        print("Installer: Failed to retrieve remote common manifest.")
+        return nil
+    end
+    local content = request.readAll()
+    request.close()
+    return textutils.unserializeJSON(content)
+end
+
 -- Function to download a module if missing
 -- This is used in this installer to download the common modules necessary to bootstrap the installation
-local function ensureModuleExists(moduleName)
+-- Ensure `common_manifest.json` is up to date when downloading modules
+local function ensureModuleExists(moduleName, remoteCommonManifest)
     local modulePath = installCommonPath .. "/" .. moduleName .. ".lua"
+    local remoteVersion = remoteCommonManifest[moduleName]
+
+    if not remoteVersion then
+        print("Installer: Error - No version info for", moduleName)
+        return
+    end
+
     if not fs.exists(modulePath) then
-        print("Installer: Downloading missing common module:", moduleName)
-        local url = repo_url_common .. "/" .. moduleName .. ".lua"
-        local headers = { ["Cache-Control"] = "no-cache, no-store, must-revalidate" }
-        local response = http.get({ url = url, headers = headers })
-        if response then
-            local file = fs.open(modulePath, "w")
-            file.write(response.readAll())
-            file.close()
-            print("Installer: Successfully installed module:", moduleName)
-        else
-            print("Installer: Error downloading module:", moduleName)
-        end
+        print("Installer: Downloading missing module:", moduleName, " v" .. remoteVersion)
+    else
+        print("Installer: Updating module:", moduleName, "to v" .. remoteVersion)
+    end
+
+    local url = repo_url_common .. "/" .. moduleName .. ".lua"
+    local headers = { ["Cache-Control"] = "no-cache, no-store, must-revalidate" }
+    local response = http.get({ url = url, headers = headers })
+
+    if response then
+        local file = fs.open(modulePath, "w")
+        file.write(response.readAll())
+        file.close()
+        print("Installer: Successfully installed module:", moduleName)
+
+        -- **✅ Update local `common_manifest.json`**
+        local localManifest = fs.exists(localManifestFile) and textutils.unserializeJSON(fs.open(localManifestFile, "r").readAll()) or {}
+        localManifest[moduleName] = remoteVersion
+        local file = fs.open(localManifestFile, "w")
+        file.write(textutils.serializeJSON(localManifest))
+        file.close()
+    else
+        print("Installer: Error downloading module:", moduleName)
     end
 end
 
--- Ensure essential common modules exist before requiring them
-ensureModuleExists("module_manager")
-ensureModuleExists("updater")
+-- Fetch latest remote common manifest before bootstrapping
+local remoteCommonManifest = fetchRemoteCommonManifest()
+if remoteCommonManifest then
+    ensureModuleExists("module_manager", remoteCommonManifest)
+    ensureModuleExists("updater", remoteCommonManifest)
+end
 
 -- Require installed modules
 local moduleManager = require("module_manager")
@@ -104,7 +140,7 @@ for _, filename in ipairs(remoteManifest.files) do
     local filePath = installDir .. filename
 
     if filename == "config.lua" and fs.exists(filePath) then
-        print("Installer: ⚠️ Skipping", filename, "(preserving user settings)")
+        print("Installer: Skipping", filename, "(preserving user settings)")
     else
         downloadFile(fileURL, filePath)
     end
