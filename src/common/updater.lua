@@ -1,33 +1,20 @@
 local updater = {}
 
--- Generate startup.lua with auto-update check
+-- Generate startup.lua
 function updater.generateStartup(installDir, programName, baseURL, installManifestFile)
     local startupContent = [[
+package.path = "/bng/common/?.lua;" .. package.path
+local updater = require("updater")
+
 local manifestPath = "]] .. installManifestFile .. [["
 local baseURL = "]] .. baseURL .. [["
 local mainScript = "]] .. installDir .. [[main.lua"
 
-local function fetchRemoteManifest()
-    local request = http.get(baseURL .. "manifest.json")
-    if not request then return nil end
-    local content = request.readAll()
-    request.close()
-    return textutils.unserializeJSON(content)
-end
-
-local function fetchLocalManifest()
-    if not fs.exists(manifestPath) then return nil end
-    local file = fs.open(manifestPath, "r")
-    local manifest = textutils.unserializeJSON(file.readAll())
-    file.close()
-    return manifest
-end
-
 local function checkForUpdates()
-    local localManifest = fetchLocalManifest()
-    local remoteManifest = fetchRemoteManifest()
+    local remoteVersion = fetchRemoteManifest()
+    local localVersion = fetchLocalManifest()
 
-    if remoteManifest and localManifest and remoteManifest.version ~= localManifest.version then
+    if remoteVersion and localVersion and remoteVersion ~= localVersion then
         print("A new version is available. Updating...")
         shell.run("installer.lua", "]] .. programName .. [[")
         os.reboot()

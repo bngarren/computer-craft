@@ -9,11 +9,13 @@ local installRootPath = "/bng"
 local installCommonPath = installRootPath .. "/common"
 local installProgramsPath = installRootPath .. "/programs"
 
--- Ensure common modules path exists
+-- Ensure common modules directory exists
 if not fs.exists(installCommonPath) then fs.makeDir(installCommonPath) end
+
+-- Add `/bng/common/` to package path so Lua can find required modules
 package.path = installCommonPath .. "/?.lua;" .. package.path
 
--- Function to download a module if it does not exist
+-- Function to download a module if missing
 local function ensureModuleExists(moduleName)
     local modulePath = installCommonPath .. "/" .. moduleName .. ".lua"
     if not fs.exists(modulePath) then
@@ -24,6 +26,7 @@ local function ensureModuleExists(moduleName)
             local file = fs.open(modulePath, "w")
             file.write(response.readAll())
             file.close()
+            print("Installed module:", moduleName)
         else
             print("Error downloading:", moduleName)
         end
@@ -80,19 +83,18 @@ if not remoteManifest then
     return
 end
 
--- **✅ Handling Dependencies (Common Modules)**
+-- Install Dependencies
 if remoteManifest.dependencies then
     moduleManager.ensureModules(remoteManifest.dependencies)
 end
 
--- **✅ Handling Program Files (Main Program & Configs)**
+-- Install Program Files
 if not fs.exists(installDir) then fs.makeDir(installDir) end
 
 for _, filename in ipairs(remoteManifest.files) do
     local fileURL = programURL .. filename
     local filePath = installDir .. filename
 
-    -- **Skip config.lua if it already exists (preserve user settings)**
     if filename == "config.lua" and fs.exists(filePath) then
         print("Skipping", filename, "(preserving user settings)")
     else
@@ -100,7 +102,7 @@ for _, filename in ipairs(remoteManifest.files) do
     end
 end
 
--- **✅ Store Installation Info**
+-- Store Installation Info
 local installManifest = {
     program = programName,
     version = remoteManifest.version,
@@ -112,5 +114,5 @@ file.close()
 
 print("Installed '" .. programName .. "' successfully.")
 
--- **✅ Generate `startup.lua` with auto-update checker**
+-- Generate `startup.lua` with auto-update checker
 updater.generateStartup(installDir, programName, programURL, installManifestFile)
