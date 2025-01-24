@@ -16,9 +16,9 @@ end
 -- Mount all peripherals
 function ppm.mount_all()
     peripherals = {}  -- Clear existing mounts
-    for _, side in ipairs(peripheral.getNames()) do
+    for name, side in ipairs(peripheral.getNames()) do
         peripherals[side] = safe_wrap(side)
-        print("PPM: Mounted " .. side)
+        print("PPM: Mounted " ..name.." on " .. side)
     end
 end
 
