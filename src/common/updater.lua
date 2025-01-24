@@ -33,6 +33,8 @@ local function checkForUpdates()
         print("Updater: A new version is available. Updating...")
         shell.run("installer.lua", "]] .. programName .. [[")
         os.reboot()
+    else
+        print("Updater: ]] ..programName..[[ v" ..localManifest.version.. " is up-to-date!")
     end
 end
 
