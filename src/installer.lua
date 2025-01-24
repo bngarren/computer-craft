@@ -3,7 +3,7 @@
 -- Last Updated: 01/23/2025
 
 -- Define repository URLs
-local repo_url_base = "https://raw.githubusercontent.com/bngarren/computer-craft/main/src"
+local repo_url_base = "https://raw.githubusercontent.com/bngarren/computer-craft/src"
 local repo_url_common = repo_url_base .. "/common"
 local installRootPath = "/bng"
 local installCommonPath = installRootPath .. "/common"
