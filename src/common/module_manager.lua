@@ -34,17 +34,27 @@ function moduleManager.ensureModules(dependencies)
         local remoteVersion = remoteManifest[moduleName]
         local localVersion = localManifest[moduleName]
 
-        print("[DEBUG] Module Manager: " .. moduleName .. " req " .. requiredVersion .. ", remote " .. remoteVersion .. ", local " ..localVersion or nil)
+        print("[DEBUG] Module Manager: " .. moduleName .. " req " .. tostring(requiredVersion) .. ", remote " .. tostring(remoteVersion) .. ", local " .. tostring(localVersion))
+
 
         -- If the program's manifest.json requires a dependency that doesn't exist remotely, we may have fatal error...
+        if not requiredVersion then
+            print("Module Manager: ERROR - Program manifest is missing version info for module: " .. moduleName)
+            return false
+        end
+        
+        if not remoteVersion then
+            print("Module Manager: ERROR - Remote manifest does not contain module: " .. moduleName)
+            return false
+        end
+        
         if requiredVersion ~= remoteVersion then
-            print("Module Manager: WARNING - module "..moduleName.." v"..requiredVersion.." is listed as dependency, however, v"..remoteVersion.." exists remotely.")
+            print("Module Manager: WARNING - module " .. moduleName .. " v" .. requiredVersion .. " is listed as dependency, but v" .. remoteVersion .. " exists remotely.")
             if localVersion == remoteVersion then
-                print("Module Manager: keeping module "..moduleName.." at v"..localVersion)
-                return
+                print("Module Manager: Keeping module " .. moduleName .. " at v" .. localVersion)
             else
-                print("FATAL")
-                return
+                print("Module Manager: FATAL ERROR - Required module version mismatch. Cannot continue.")
+                return false
             end
         end
 
@@ -55,7 +65,7 @@ function moduleManager.ensureModules(dependencies)
             if not fs.exists(modulePath) then
                 print("Module Manager: Installing module:", moduleName, " v" .. remoteVersion)
             else
-                print("Module Manager: Updating module:", moduleName, " v" .. localVersion .. " to v" .. remoteVersion)
+                print("Module Manager: Updating module:", moduleName, " v" .. tostring(localVersion) .. " → v" .. tostring(remoteVersion))
             end
             local moduleURL = remoteCommonURL .. moduleName .. ".lua"
             local headers = { ["Cache-Control"] = "no-cache, no-store, must-revalidate" }
