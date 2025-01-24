@@ -36,7 +36,11 @@ function moduleManager.ensureModules(dependencies)
         if fs.exists(modulePath) and localVersion == remoteVersion then
             print("Module Manager: Module already up to date (" .. moduleName .. " v" .. localVersion .. ")")
         else
-            print("Module Manager: Updating module:", moduleName, "to v" .. remoteVersion)
+            if not fs.exists(modulePath) then
+                print("Module Manager: Installing module:", moduleName, " v" .. remoteVersion)
+            else
+                print("Module Manager: Updating module:", moduleName, " v" .. localVersion .. " to v" .. remoteVersion)
+            end
             local moduleURL = remoteCommonURL .. moduleName .. ".lua"
             local headers = { ["Cache-Control"] = "no-cache, no-store, must-revalidate" }
             local request = http.get({ url = moduleURL, headers = headers })
