@@ -16,10 +16,11 @@ if not fs.exists(installCommonPath) then fs.makeDir(installCommonPath) end
 package.path = installCommonPath .. "/?.lua;" .. package.path
 
 -- Function to download a module if missing
+-- This is used in this installer to download the common modules necessary to bootstrap the installation
 local function ensureModuleExists(moduleName)
     local modulePath = installCommonPath .. "/" .. moduleName .. ".lua"
     if not fs.exists(modulePath) then
-        print("Downloading missing module:", moduleName)
+        print("Installer: Downloading missing common module:", moduleName)
         local url = repo_url_common .. "/" .. moduleName .. ".lua"
         local headers = { ["Cache-Control"] = "no-cache, no-store, must-revalidate" }
         local response = http.get({ url = url, headers = headers })
@@ -27,14 +28,14 @@ local function ensureModuleExists(moduleName)
             local file = fs.open(modulePath, "w")
             file.write(response.readAll())
             file.close()
-            print("Installed module:", moduleName)
+            print("Installer: ✅ Successfully installed module:", moduleName)
         else
-            print("Error downloading:", moduleName)
+            print("Installer: ❗️ Error downloading module:", moduleName)
         end
     end
 end
 
--- Ensure essential modules exist before requiring them
+-- Ensure essential common modules exist before requiring them
 ensureModuleExists("module_manager")
 ensureModuleExists("updater")
 
@@ -47,7 +48,7 @@ local function downloadFile(url, filePath)
     local headers = { ["Cache-Control"] = "no-cache, no-store, must-revalidate" }
     local response = http.get({ url = url, headers = headers })
     if not response then
-        print("Error downloading:", filePath)
+        print("Installer: ❗️ Error downloading:", filePath)
         return false
     end
     local file = fs.open(filePath, "w")
@@ -56,11 +57,15 @@ local function downloadFile(url, filePath)
     return true
 end
 
--- Function to fetch and parse remote JSON manifests
+-- Function to fetch and parse remote JSON files, e.g. manifests
 local function fetchRemoteJSON(url)
     local headers = { ["Cache-Control"] = "no-cache, no-store, must-revalidate" }
     local response = http.get({ url = url, headers = headers })
-    if not response then return nil end
+    if not response then 
+        print("Installer: ❗️ Error downloading JSON file:", url)
+        return nil 
+    end
+    print("Installer: Downloaded JSON file:", url)
     local content = response.readAll()
     response.close()
     return textutils.unserializeJSON(content)
@@ -82,7 +87,7 @@ local installManifestFile = installDir .. "install_manifest.json"
 -- Fetch remote program manifest
 local remoteManifest = fetchRemoteJSON(manifestURL)
 if not remoteManifest then
-    print("Failed to retrieve manifest for:", programName)
+    print("Installer: ❗️ Failed to retrieve manifest for:", programName)
     return
 end
 
@@ -99,7 +104,7 @@ for _, filename in ipairs(remoteManifest.files) do
     local filePath = installDir .. filename
 
     if filename == "config.lua" and fs.exists(filePath) then
-        print("Skipping", filename, "(preserving user settings)")
+        print("Installer: ⚠️ Skipping", filename, "(preserving user settings)")
     else
         downloadFile(fileURL, filePath)
     end
@@ -109,13 +114,15 @@ end
 local installManifest = {
     program = programName,
     version = remoteManifest.version,
+    files = remoteManifest.files,
+    dependencies = remoteManifest.dependencies,
     date = os.date("%Y-%m-%d %H:%M:%S")
 }
 local file = fs.open(installManifestFile, "w")
 file.write(textutils.serializeJSON(installManifest))
 file.close()
 
-print("Installed '" .. programName .. "' successfully.")
+print("Installer: ✅ Installed '" .. programName .. "' successfully.")
 
 -- Generate `startup.lua` with auto-update checker
 updater.generateStartup(installDir, programName, programURL, installManifestFile)

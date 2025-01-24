@@ -1,6 +1,8 @@
 -- main.lua
 -- Main script to monitor an energy cube
 
+package.path = "/bng/common/?.lua;" .. package.path
+
 local ppm = require("ppm")
 local config = require("config")
 local util = require("util")
