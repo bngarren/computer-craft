@@ -9,7 +9,7 @@ local function fetchRemoteManifest(url)
     local headers = { ["Cache-Control"] = "no-cache, no-store, must-revalidate" }
     local response = http.get({ url = url, headers = headers })
     if not response then 
-        print("Updater: Failed to download remote program manifest file for:"]] .. programName ..[[)
+        print("Updater: Failed to download remote program manifest file for:]]..programName..[[")
         return nil
     end
     local content = response.readAll()
