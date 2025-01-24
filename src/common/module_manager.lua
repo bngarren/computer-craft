@@ -38,7 +38,11 @@ function moduleManager.ensureModules(dependencies)
         local localVersion = localManifest[moduleName]
 
         if not fs.exists(modulePath) or localVersion ~= remoteVersion then
-            print("Updating module:", moduleName, "to v" .. remoteVersion)
+            if not fs.exists(modulePath) then
+                print("Initial download of module:", moduleName, " v" .. remoteVersion)
+            else
+                print("Updating module:", moduleName, "from v" .. localVersion .. " to v" .. remoteVersion)
+            end
             local moduleURL = remoteCommonURL .. moduleName .. ".lua"
             local headers = { ["Cache-Control"] = "no-cache, no-store, must-revalidate" }
             local request = http.get({ url = moduleURL, headers = headers })
