@@ -34,7 +34,7 @@ function moduleManager.ensureModules(dependencies)
         local remoteVersion = remoteManifest[moduleName]
         local localVersion = localManifest[moduleName]
 
-        print("[DEBUG] Module Manager: " .. moduleName .. " req " .. requiredVersion .. ", remote " .. remoteVersion .. ", local " ..localVersion)
+        print("[DEBUG] Module Manager: " .. moduleName .. " req " .. requiredVersion .. ", remote " .. remoteVersion .. ", local " ..localVersion or nil)
 
         -- If the program's manifest.json requires a dependency that doesn't exist remotely, we may have fatal error...
         if requiredVersion ~= remoteVersion then
