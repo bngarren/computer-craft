@@ -9,7 +9,7 @@ local function fetchRemoteManifest(url)
     local headers = { ["Cache-Control"] = "no-cache, no-store, must-revalidate" }
     local response = http.get({ url = url, headers = headers })
     if not response then 
-        print("Updater: ❗️ Failed to download remote program manifest file for:"]] .. programName[[)
+        print("Updater: Failed to download remote program manifest file for:"]] .. programName ..[[)
         return nil
     end
     local content = response.readAll()
@@ -30,7 +30,7 @@ local function checkForUpdates()
     local localManifest = fetchLocalManifest("]] .. installManifestFile .. [[")
 
     if remoteManifest and localManifest and remoteManifest.version ~= localManifest.version then
-        print("Updater: ✨ A new version is available. Updating...")
+        print("Updater: A new version is available. Updating...")
         shell.run("installer.lua", "]] .. programName .. [[")
         os.reboot()
     end

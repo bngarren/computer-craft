@@ -28,9 +28,9 @@ local function ensureModuleExists(moduleName)
             local file = fs.open(modulePath, "w")
             file.write(response.readAll())
             file.close()
-            print("Installer: ✅ Successfully installed module:", moduleName)
+            print("Installer: Successfully installed module:", moduleName)
         else
-            print("Installer: ❗️ Error downloading module:", moduleName)
+            print("Installer: Error downloading module:", moduleName)
         end
     end
 end
@@ -48,7 +48,7 @@ local function downloadFile(url, filePath)
     local headers = { ["Cache-Control"] = "no-cache, no-store, must-revalidate" }
     local response = http.get({ url = url, headers = headers })
     if not response then
-        print("Installer: ❗️ Error downloading:", filePath)
+        print("Installer: Error downloading:", filePath)
         return false
     end
     local file = fs.open(filePath, "w")
@@ -62,7 +62,7 @@ local function fetchRemoteJSON(url)
     local headers = { ["Cache-Control"] = "no-cache, no-store, must-revalidate" }
     local response = http.get({ url = url, headers = headers })
     if not response then 
-        print("Installer: ❗️ Error downloading JSON file:", url)
+        print("Installer: Error downloading JSON file:", url)
         return nil 
     end
     print("Installer: Downloaded JSON file:", url)
@@ -87,7 +87,7 @@ local installManifestFile = installDir .. "install_manifest.json"
 -- Fetch remote program manifest
 local remoteManifest = fetchRemoteJSON(manifestURL)
 if not remoteManifest then
-    print("Installer: ❗️ Failed to retrieve manifest for:", programName)
+    print("Installer: Failed to retrieve manifest for:", programName)
     return
 end
 
@@ -122,7 +122,7 @@ local file = fs.open(installManifestFile, "w")
 file.write(textutils.serializeJSON(installManifest))
 file.close()
 
-print("Installer: ✅ Installed '" .. programName .. "' successfully.")
+print("Installer: Installed '" .. programName .. "' successfully.")
 
 -- Generate `startup.lua` with auto-update checker
 updater.generateStartup(installDir, programName, programURL, installManifestFile)
