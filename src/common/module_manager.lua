@@ -14,6 +14,7 @@ local function fetchCommonManifest()
         return nil
     end
     local content = request.readAll()
+    print("Module Manager: Remote common_manifest contains: " .. content)
     request.close()
     return textutils.unserializeJSON(content)
 end
@@ -29,8 +30,23 @@ function moduleManager.ensureModules(dependencies)
 
     for moduleName, moduleInfo in pairs(dependencies) do
         local modulePath = installPath .. "/" .. moduleName .. ".lua"
-        local remoteVersion = moduleInfo.version
+        local requiredVersion = moduleInfo.version
+        local remoteVersion = remoteManifest[moduleName]
         local localVersion = localManifest[moduleName]
+
+        print("[DEBUG] Module Manager: " .. moduleName .. " req " .. requiredVersion .. ", remote " .. remoteVersion .. ", local " ..localVersion)
+
+        -- If the program's manifest.json requires a dependency that doesn't exist remotely, we may have fatal error...
+        if requiredVersion ~= remoteVersion then
+            print("Module Manager: WARNING - module "..moduleName.." v"..requiredVersion.." is listed as dependency, however, v"..remoteVersion.." exists remotely.")
+            if localVersion == remoteVersion then
+                print("Module Manager: keeping module "..moduleName.." at v"..localVersion)
+                return
+            else
+                print("FATAL")
+                return
+            end
+        end
 
         -- Skip modules that were already updated by the installer
         if fs.exists(modulePath) and localVersion == remoteVersion then
