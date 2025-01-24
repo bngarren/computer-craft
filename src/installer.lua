@@ -13,7 +13,28 @@ local installProgramsPath = installRootPath .. "/programs"
 if not fs.exists(installCommonPath) then fs.makeDir(installCommonPath) end
 package.path = installCommonPath .. "/?.lua;" .. package.path
 
--- Require common modules
+-- Function to download a module if it does not exist
+local function ensureModuleExists(moduleName)
+    local modulePath = installCommonPath .. "/" .. moduleName .. ".lua"
+    if not fs.exists(modulePath) then
+        print("Downloading missing module:", moduleName)
+        local url = repo_url_common .. "/" .. moduleName .. ".lua"
+        local response = http.get(url)
+        if response then
+            local file = fs.open(modulePath, "w")
+            file.write(response.readAll())
+            file.close()
+        else
+            print("Error downloading:", moduleName)
+        end
+    end
+end
+
+-- Ensure essential modules exist before requiring them
+ensureModuleExists("module_manager")
+ensureModuleExists("updater")
+
+-- Require installed modules
 local moduleManager = require("module_manager")
 local updater = require("updater")
 
