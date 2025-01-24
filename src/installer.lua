@@ -8,7 +8,7 @@ local repo_url_common = repo_url_base .. "/common"
 local installRootPath = "/bng"
 local installCommonPath = installRootPath .. "/common"
 local installProgramsPath = installRootPath .. "/programs"
-local localManifestFile = installCommonPath .. "common_manifest.json"
+local localManifestFile = installCommonPath .. "/common_manifest.json"
 
 -- Ensure common modules directory exists
 if not fs.exists(installCommonPath) then fs.makeDir(installCommonPath) end
