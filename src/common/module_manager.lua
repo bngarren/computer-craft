@@ -1,13 +1,17 @@
 local moduleManager = {}
 
-local remoteCommonManifestURL = "https://raw.githubusercontent.com/bngarren/computer-craft/master/src/common/common_manifest.json"
+local remoteCommonURL = "https://raw.githubusercontent.com/bngarren/computer-craft/master/src/common/"
+local remoteCommonManifestURL = remoteCommonURL .. "common_manifest.json"
 local installPath = "/bng/common/"
 local localManifestFile = installPath .. "common_manifest.json"
 
 -- Fetch remote common manifest
 local function fetchCommonManifest()
     local request = http.get(remoteCommonManifestURL)
-    if not request then return nil end
+    if not request then
+        print("Error: Failed to retrieve common manifest.")
+        return nil
+    end
     local content = request.readAll()
     request.close()
     return textutils.unserializeJSON(content)
@@ -34,11 +38,19 @@ function moduleManager.ensureModules(dependencies)
 
         if not fs.exists(modulePath) or localVersion ~= remoteVersion then
             print("Updating module:", moduleName, "to v" .. remoteVersion)
-            local moduleURL = remoteCommonManifestURL .. moduleName .. ".lua"
-            local file = fs.open(modulePath, "w")
-            file.write(http.get(moduleURL).readAll())
-            file.close()
-            localManifest[moduleName] = remoteVersion
+            local moduleURL = remoteCommonURL .. moduleName .. ".lua"
+            local request = http.get(moduleURL)
+
+            if request then
+                local content = request.readAll()
+                request.close()
+                local file = fs.open(modulePath, "w")
+                file.write(content)
+                file.close()
+                localManifest[moduleName] = remoteVersion
+            else
+                print("Error: Failed to download module:", moduleName)
+            end
         end
     end
 
