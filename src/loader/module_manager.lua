@@ -1,6 +1,6 @@
 local moduleManager = {}
 
-local libraryURL = "https://raw.githubusercontent.com/bngarren/computer-craft/src/common/"
+local libraryURL = "https://raw.githubusercontent.com/bngarren/computer-craft/master/src/common/"
 local commonManifestURL = libraryURL .. "common_manifest.json"
 local installPath = "/bng/common/"
 
