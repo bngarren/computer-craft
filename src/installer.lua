@@ -2,6 +2,8 @@
 -- Author: Ben Garren
 -- Last Updated: 01/23/2025
 
+-- installer.lua
+
 -- Define repository URLs
 local repo_url_base = "https://raw.githubusercontent.com/bngarren/computer-craft/master/src"
 local repo_url_common = repo_url_base .. "/common"
@@ -16,23 +18,47 @@ if not fs.exists(installCommonPath) then fs.makeDir(installCommonPath) end
 -- Add `/bng/common/` to package path so Lua can find required modules
 package.path = installCommonPath .. "/?.lua;" .. package.path
 
--- Fetch remote common manifest
-local function fetchRemoteCommonManifest()
+-- Function to download a file
+local function downloadFile(url, filePath)
     local headers = { ["Cache-Control"] = "no-cache, no-store, must-revalidate" }
-    local request = http.get({ url = repo_url_common .. "/common_manifest.json", headers = headers })
-    if not request then
-        print("Installer: Failed to retrieve remote common manifest.")
-        return nil
+    local response = http.get({ url = url, headers = headers })
+    if not response then
+        print("Installer: Error downloading:", url)
+        return false
     end
-    local content = request.readAll()
-    request.close()
+
+    local file = fs.open(filePath, "w")
+    file.write(response.readAll())
+    file.close()
+    return true
+end
+
+-- Function to fetch and parse remote JSON files, e.g. manifests
+local function fetchRemoteJSON(url)
+    local headers = { ["Cache-Control"] = "no-cache, no-store, must-revalidate" }
+    local response = http.get({ url = url, headers = headers })
+    if not response then 
+        print("Installer: Error downloading JSON file:", url)
+        return nil 
+    end
+    local content = response.readAll()
+    response.close()
     return textutils.unserializeJSON(content)
 end
 
 -- Function to update local `common_manifest.json`
+-- i.e. When this installer manually installs required modules that are needed for this installer
+-- Otherwise, common modules used by individual programs should be installed/updated by module_manager
 local function updateLocalManifest(moduleName, version)
-    local localManifest = fs.exists(localManifestFile) and textutils.unserializeJSON(fs.open(localManifestFile, "r").readAll()) or {}
+    local localManifest = {}
+    if fs.exists(localManifestFile) then
+        local handle = fs.open(localManifestFile, "r")
+        local contents = handle.readAll()
+        handle.close()
+        localManifest = textutils.unserializeJSON(contents) or {}
+    end
     localManifest[moduleName] = version
+
     local file = fs.open(localManifestFile, "w")
     file.write(textutils.serializeJSON(localManifest))
     file.close()
@@ -54,8 +80,15 @@ end
 local function ensureModuleExists(moduleName, remoteCommonManifest)
     local modulePath = installCommonPath .. "/" .. moduleName .. ".lua"
     local remoteVersion = remoteCommonManifest[moduleName]
-    local localManifest = fs.exists(localManifestFile) and textutils.unserializeJSON(fs.open(localManifestFile, "r").readAll()) or {}
-    local localVersion = localManifest[moduleName]
+
+    local localVersion
+    if fs.exists(localManifestFile) then
+        local f = fs.open(localManifestFile, "r")
+        local manifestData = f.readAll()
+        f.close()
+        local localManifest = textutils.unserializeJSON(manifestData) or {}
+        localVersion = localManifest[moduleName]
+    end
 
     if not remoteVersion then
         print("Installer: Error - No version info for", moduleName)
@@ -72,68 +105,40 @@ local function ensureModuleExists(moduleName, remoteCommonManifest)
     end
 
     local url = repo_url_common .. "/" .. moduleName .. ".lua"
-    local headers = { ["Cache-Control"] = "no-cache, no-store, must-revalidate" }
-    local response = http.get({ url = url, headers = headers })
-
-    if not response then
+    if not downloadFile(url, modulePath) then
         print("Installer: ERROR downloading module:", moduleName)
         return false
     end
 
-    local file = fs.open(modulePath, "w")
-    file.write(response.readAll())
-    file.close()
     print("Installer: Successfully installed module:", moduleName)
-
     updateLocalManifest(moduleName, remoteVersion)
     return true
 end
 
 -- Fetch latest remote common manifest before bootstrapping
-local remoteCommonManifest = fetchRemoteCommonManifest()
-if remoteCommonManifest then
-    if not ensureModuleExists("module_manager", remoteCommonManifest) or not ensureModuleExists("updater", remoteCommonManifest) then
-        print("Installer: FATAL - Required core modules missing. Installation cannot proceed.")
-        return false
-    end
-    if not ensureModuleExists("status", remoteCommonManifest) then
-        print("Installer: WARNING - Could not install status.lua")
-    end
+local remoteCommonManifest = fetchRemoteJSON(repo_url_common .. "/common_manifest.json")
+if not remoteCommonManifest then
+    print("Installer: Failed to retrieve remote common manifest.")
+    return false
+end
+
+-- Ensure core modules are installed
+if not ensureModuleExists("module_manager", remoteCommonManifest) or
+   not ensureModuleExists("updater", remoteCommonManifest) then
+    print("Installer: FATAL - Required core modules missing. Installation cannot proceed.")
+    return false
+end
+
+-- Optional modules
+if not ensureModuleExists("status", remoteCommonManifest) then
+    print("Installer: WARNING - Could not install status.lua")
 end
 
 -- Require installed modules
 local moduleManager = require("module_manager")
 local updater = require("updater")
 
--- Function to download a file
-local function downloadFile(url, filePath)
-    local headers = { ["Cache-Control"] = "no-cache, no-store, must-revalidate" }
-    local response = http.get({ url = url, headers = headers })
-    if not response then
-        print("Installer: Error downloading:", filePath)
-        return false
-    end
-    local file = fs.open(filePath, "w")
-    file.write(response.readAll())
-    file.close()
-    return true
-end
-
--- Function to fetch and parse remote JSON files, e.g. manifests
-local function fetchRemoteJSON(url)
-    local headers = { ["Cache-Control"] = "no-cache, no-store, must-revalidate" }
-    local response = http.get({ url = url, headers = headers })
-    if not response then 
-        print("Installer: Error downloading JSON file:", url)
-        return nil 
-    end
-    print("Installer: Downloaded JSON file:", url)
-    local content = response.readAll()
-    response.close()
-    return textutils.unserializeJSON(content)
-end
-
--- Get command line arguments
+-- Get command line arguments (re-fetching, ignoring the earlier 'args' in scope)
 local args = {...}
 if #args < 1 then
     print("Usage: installer <programName> [--version]")
@@ -166,6 +171,7 @@ for _, filename in ipairs(remoteProgramManifest.files) do
     local fileURL = programURL .. filename
     local filePath = installDir .. filename
 
+    -- Preserve existing config
     if filename == "config.lua" and fs.exists(filePath) then
         print("Installer: Skipping", filename, "(preserving user settings)")
     else
@@ -181,6 +187,7 @@ local installManifest = {
     dependencies = remoteProgramManifest.dependencies,
     date = os.date("%Y-%m-%d %H:%M:%S")
 }
+
 local file = fs.open(installManifestFile, "w")
 file.write(textutils.serializeJSON(installManifest))
 file.close()
@@ -189,3 +196,4 @@ print("Installer: Installed '" .. programName .. "' successfully.")
 
 -- Generate `startup.lua` with auto-update checker
 updater.generateStartup(installDir, programName, programURL, installManifestFile)
+
