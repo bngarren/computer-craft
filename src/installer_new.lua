@@ -107,7 +107,7 @@ if remoteProgramManifest["bng-cc-core"] then
     -- **Download only required modules**
     print("Installer: Installing `bng-cc-core` v" .. requiredCoreVersion .. "...")
     for _, module in ipairs(requiredModules) do
-        local url = "https://raw.githubusercontent.com/bngarren/bng-cc-core/" 
+        local url = "https://raw.githubusercontent.com/bngarren/bng-cc-core/refs/tags/v" 
                     .. requiredCoreVersion .. "/src/" .. module .. ".lua"
         local filePath = installCorePath .. "/" .. module .. ".lua"
         if not downloadFile(url, filePath) then
