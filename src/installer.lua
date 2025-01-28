@@ -1,199 +1,185 @@
--- GitHub Repository Script Installer for ComputerCraft
--- Author: Ben Garren
--- Last Updated: 01/23/2025
+-- Utility functions
+local util = {}
 
--- installer.lua
+-- Define repository URL
+local programs_repo_url = "https://raw.githubusercontent.com/bngarren/computer-craft/master/src"
+local bng_cc_core_repo_url = "https://raw.githubusercontent.com/bngarren/bng-cc-core"
 
--- Define repository URLs
-local repo_url_base = "https://raw.githubusercontent.com/bngarren/computer-craft/master/src"
-local repo_url_common = repo_url_base .. "/common"
+-- Define installation paths
 local installRootPath = "/bng"
 local installCommonPath = installRootPath .. "/common"
+local installCorePath = installCommonPath .. "/bng-cc-core"
 local installProgramsPath = installRootPath .. "/programs"
-local localManifestFile = installCommonPath .. "/common_manifest.json"
 
--- Ensure common modules directory exists
-if not fs.exists(installCommonPath) then fs.makeDir(installCommonPath) end
-
--- Add `/bng/common/` to package path so Lua can find required modules
-package.path = installCommonPath .. "/?.lua;" .. package.path
-
--- Function to download a file
-local function downloadFile(url, filePath)
-    local headers = { ["Cache-Control"] = "no-cache, no-store, must-revalidate" }
-    local response = http.get({ url = url, headers = headers })
-    if not response then
-        print("Installer: Error downloading:", url)
-        return false
+-- Safely read JSON files
+local function readJSON(filePath)
+    if fs.exists(filePath) then
+        local file = fs.open(filePath, "r")
+        local content = textutils.unserializeJSON(file.readAll())
+        file.close()
+        return content or {}
     end
+    return {}
+end
 
+-- Update installed.json in bng-cc-core
+local function updateCoreManifest(version, modules)
+    local data = { version = version, modules = modules }
+    local file = fs.open(installCorePath .. "/installed.json", "w")
+    file.write(textutils.serializeJSON(data))
+    file.close()
+end
+
+-- Fetch remote JSON data (e.g., manifests)
+local function fetchRemoteJSON(url)
+    local response = http.get({ url = url, headers = { ["Cache-Control"] = "no-cache" } })
+    if type(response) == "string" then
+        print(response)
+        return nil
+    end
+    if not response then 
+        print("Installer: Error - unknown error attempting to GET " .. url)
+        return nil
+        end
+    local content = response.readAll()
+    response.close()
+    return textutils.unserializeJSON(content)
+end
+
+-- Download a file from a URL
+local function downloadFile(url, filePath)
+    local response = http.get({ url = url, headers = { ["Cache-Control"] = "no-cache" } })
+    if not response then return false end
     local file = fs.open(filePath, "w")
     file.write(response.readAll())
     file.close()
     return true
 end
 
--- Function to fetch and parse remote JSON files, e.g. manifests
-local function fetchRemoteJSON(url)
-    local headers = { ["Cache-Control"] = "no-cache, no-store, must-revalidate" }
-    local response = http.get({ url = url, headers = headers })
-    if not response then 
-        print("Installer: Error downloading JSON file:", url)
-        return nil 
-    end
-    local content = response.readAll()
-    response.close()
-    return textutils.unserializeJSON(content)
+local function getCoreModuleURL(version, moduleName)
+    return bng_cc_core_repo_url .. "/refs/tags/v" .. version .. "/src/" .. moduleName .. ".lua"
 end
 
--- Function to update local `common_manifest.json`
--- i.e. When this installer manually installs required modules that are needed for this installer
--- Otherwise, common modules used by individual programs should be installed/updated by module_manager
-local function updateLocalManifest(moduleName, version)
-    local localManifest = {}
-    if fs.exists(localManifestFile) then
-        local handle = fs.open(localManifestFile, "r")
-        local contents = handle.readAll()
-        handle.close()
-        localManifest = textutils.unserializeJSON(contents) or {}
-    end
-    localManifest[moduleName] = version
+-- Retrieve currently installed bng-cc-core modules
+local function getCurrentCoreModules()
+    local currentModules = {}
+    local debugFile = fs.open("/debug_log.txt", "w")
 
-    local file = fs.open(localManifestFile, "w")
-    file.write(textutils.serializeJSON(localManifest))
-    file.close()
+    if not fs.exists(installCorePath) then
+        debugFile.write("Debug: installCorePath does not exist.\n")
+        debugFile.close()
+        return currentModules
+    end
+
+    local files = fs.list(installCorePath)
+
+    if type(files) ~= "table" then
+        debugFile.write("Debug: fs.list() did not return a table! Type: " .. type(files) .. "\n")
+        debugFile.close()
+        return currentModules
+    end
+
+    for index, file in ipairs(files) do
+        local filePath = fs.combine(installCorePath, file)
+        debugFile.write("Debug: Checking file: " .. file .. " | Index: " .. tostring(index) .. "\n")
+
+        -- **🔹 Ensure we only process .lua files and ignore installed.json**
+        if fs.exists(filePath) and not fs.isDir(filePath) and file:match("%.lua$") then
+            local moduleName = file:gsub("%.lua$", "")
+            table.insert(currentModules, moduleName)
+            debugFile.write("Debug: Added module: " .. moduleName .. "\n")
+        end
+    end
+
+    debugFile.write("Debug: Final module list: " .. textutils.serialize(currentModules) .. "\n")
+    debugFile.close()
+
+    return currentModules
 end
 
-local isForceUpdate = false
-local args = {...}
-
--- Check if --force flag is present
-for _, arg in ipairs(args) do
-    if arg == "--force" then
-        isForceUpdate = true
-        print("Installer: Force update mode enabled. All common modules will be overwritten.")
+-- Fully install `bng-cc-core` with required modules
+local function fullInstallCore(version, requiredModules)
+    print("Installer: Installing `bng-cc-core` v" .. version .. "...")
+    
+    -- Create a temporary directory for the new installation
+    local tempPath = installCommonPath .. "/_bng-cc-core"
+    if fs.exists(tempPath) then fs.delete(tempPath) end
+    fs.makeDir(tempPath)
+    
+    -- Attempt to download all modules first
+    for _, module in ipairs(requiredModules) do
+        local url = getCoreModuleURL(version, module)
+        local filePath = tempPath .. "/" .. module .. ".lua"
+        if not downloadFile(url, filePath) then
+            print("Installer: Failed to download `bng-cc-core` module: " .. module)
+            fs.delete(tempPath)
+            return false
+        end
     end
-end
-
--- Function to download a module if missing or out-of-date
--- Ensure `common_manifest.json` is up to date when downloading modules
-local function ensureModuleExists(moduleName, remoteCommonManifest)
-    local modulePath = installCommonPath .. "/" .. moduleName .. ".lua"
-    local remoteVersion = remoteCommonManifest[moduleName]
-
-    local localVersion
-    if fs.exists(localManifestFile) then
-        local f = fs.open(localManifestFile, "r")
-        local manifestData = f.readAll()
-        f.close()
-        local localManifest = textutils.unserializeJSON(manifestData) or {}
-        localVersion = localManifest[moduleName]
-    end
-
-    if not remoteVersion then
-        print("Installer: Error - No version info for", moduleName)
-        return false
-    end
-
-    if not fs.exists(modulePath) then
-        print("Installer: Installing module:", moduleName, " v" .. remoteVersion)
-    elseif localVersion == remoteVersion then
-        print("Installer: Module is up-to-date:", moduleName, " v" .. remoteVersion)
-        return true
-    else
-        print("Installer: Updating module:", moduleName, " v" .. tostring(localVersion) .. " → v" .. remoteVersion)
-    end
-
-    local url = repo_url_common .. "/" .. moduleName .. ".lua"
-    if not downloadFile(url, modulePath) then
-        print("Installer: ERROR downloading module:", moduleName)
-        return false
-    end
-
-    print("Installer: Successfully installed module:", moduleName)
-    updateLocalManifest(moduleName, remoteVersion)
+    
+    -- If all downloads succeeded, remove the old installation and move the new one into place
+    if fs.exists(installCorePath) then fs.delete(installCorePath) end
+    fs.move(tempPath, installCorePath)
+    updateCoreManifest(version, requiredModules)
+    print("Installer: Installed `bng-cc-core` v" .. version .. " with modules: " .. table.concat(requiredModules, ", "))
     return true
 end
 
--- Fetch latest remote common manifest before bootstrapping
-local remoteCommonManifest = fetchRemoteJSON(repo_url_common .. "/common_manifest.json")
-if not remoteCommonManifest then
-    print("Installer: Failed to retrieve remote common manifest.")
-    return false
-end
+-- Main installer function
+local function main(args)
+    if #args < 1 then return print("Usage: installer <programName>") end
+    local programName = args[1]
+    local installDir = installProgramsPath .. "/" .. programName .. "/"
+    local programURL = programs_repo_url .. "/programs/" .. programName .. "/"
+    local programManifestURL = programURL .. "manifest.json"
 
--- Ensure core modules are installed
-if not ensureModuleExists("module_manager", remoteCommonManifest) or
-   not ensureModuleExists("updater", remoteCommonManifest) then
-    print("Installer: FATAL - Required core modules missing. Installation cannot proceed.")
-    return false
-end
+    local remoteProgramManifest = fetchRemoteJSON(programManifestURL)
+    if not remoteProgramManifest then return print("Installer: Failed to retrieve manifest for:", programName) end
 
--- Optional modules
-if not ensureModuleExists("status", remoteCommonManifest) then
-    print("Installer: WARNING - Could not install status.lua")
-end
+    -- Handle `bng-cc-core` installation
+    if remoteProgramManifest["bng-cc-core"] then
+        local requiredCore = remoteProgramManifest["bng-cc-core"]
+        local requiredCoreVersion = requiredCore.version
+        local requiredModules = requiredCore.modules or {}
+        local installedCore = readJSON(installCorePath .. "/installed.json")
+        local installedCoreVersion = installedCore.version
+        
+        local currentCoreModules = getCurrentCoreModules()
+        local allModules = {}
+        for _, module in ipairs(currentCoreModules) do allModules[module] = true end
+        for _, module in ipairs(requiredModules) do allModules[module] = true end
+        local moduleList = {}
+        for module, _ in pairs(allModules) do table.insert(moduleList, module) end
 
--- Require installed modules
-local moduleManager = require("module_manager")
-local updater = require("updater")
+        -- If no previous installation of bng-cc-core, then do full install 
+        if not installedCoreVersion then
+            if not fullInstallCore(requiredCoreVersion, moduleList) then return print("Installer: Failed to install `bng-cc-core`.") end
+        -- Else, do a version comparison to determine how to proceed
+        else 
+            local versionComparison = util.compare_versions(installedCoreVersion, requiredCoreVersion)
+            if versionComparison == 0 then
+                print("Installer: bng-cc-core v" .. requiredCoreVersion .. " is required and present.")
+            else
+                print("Warning: This program requires `bng-cc-core` v" .. requiredCoreVersion .. ", but v" .. installedCoreVersion .. " is installed.")
+                print("Would you like to " .. (versionComparison == -1 and "update" or "downgrade") .. " `bng-cc-core` to v" .. requiredCoreVersion .. "? (y/n)")
+                if io.read() ~= "y" then return print("Installer: Aborting due to version mismatch.") end
+                if not fullInstallCore(requiredCoreVersion, moduleList) then return print("Installer: Failed to install `bng-cc-core`.") end
+            end
+        end
 
--- Get command line arguments (re-fetching, ignoring the earlier 'args' in scope)
-local args = {...}
-if #args < 1 then
-    print("Usage: installer <programName> [--version]")
-    return
-end
-
-local programName = args[1]
-local installDir = installProgramsPath .. "/" .. programName .. "/"
-local programURL = repo_url_base .. "/programs/" .. programName .. "/"
-local programManifestURL = programURL .. "manifest.json"
-local installManifestFile = installDir .. "install_manifest.json"
-
--- Fetch remote program manifest
-local remoteProgramManifest = fetchRemoteJSON(programManifestURL)
-if not remoteProgramManifest then
-    print("Installer: Failed to retrieve manifest for:", programName)
-    return
-end
-
--- Install Dependencies (Pass `isForceUpdate` to moduleManager)
-if remoteProgramManifest.dependencies then
-    local result = moduleManager.ensureModules(remoteProgramManifest.dependencies, isForceUpdate)
-    if not result then return 1 end
-end
-
--- Install Program Files
-if not fs.exists(installDir) then fs.makeDir(installDir) end
-
-for _, filename in ipairs(remoteProgramManifest.files) do
-    local fileURL = programURL .. filename
-    local filePath = installDir .. filename
-
-    -- Preserve existing config
-    if filename == "config.lua" and fs.exists(filePath) then
-        print("Installer: Skipping", filename, "(preserving user settings)")
-    else
-        downloadFile(fileURL, filePath)
+        
     end
 end
 
--- Store Installation Info
-local installManifest = {
-    program = programName,
-    version = remoteProgramManifest.version,
-    files = remoteProgramManifest.files,
-    dependencies = remoteProgramManifest.dependencies,
-    date = os.date("%Y-%m-%d %H:%M:%S")
-}
+-- Version comparison function
+function util.compare_versions(versionA, versionB)
+    local function parse_version(version) return version:match("^(%d+)%.(%d+)%.(%d+)$") end
+    local a1, a2, a3 = parse_version(versionA)
+    local b1, b2, b3 = parse_version(versionB)
+    if a1 ~= b1 then return a1 > b1 and 1 or -1 end
+    if a2 ~= b2 then return a2 > b2 and 1 or -1 end
+    if a3 ~= b3 then return a3 > b3 and 1 or -1 end
+    return 0
+end
 
-local file = fs.open(installManifestFile, "w")
-file.write(textutils.serializeJSON(installManifest))
-file.close()
-
-print("Installer: Installed '" .. programName .. "' successfully.")
-
--- Generate `startup.lua` with auto-update checker
-updater.generateStartup(installDir, programName, programURL, installManifestFile)
-
+main({ ... })

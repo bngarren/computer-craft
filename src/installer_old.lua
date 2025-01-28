@@ -1,153 +1,199 @@
---[[
-    GitHub Repository Script Installer for ComputerCraft
-    Author: Ben Garren
-    Repository URL: https://github.com/bngarren/computer-craft
-    Last Updated: 04/02/2024
+-- GitHub Repository Script Installer for ComputerCraft
+-- Author: Ben Garren
+-- Last Updated: 01/23/2025
 
-    Purpose:
-    This script automates the process of installing Lua scripts from my GitHub repository into ComputerCraft computers. 
-    It supports automatic dependency resolution via .deps files, ensuring all required scripts are downloaded and available for execution.
+-- installer.lua
 
-    Arguments:
-    - <programName>: The name of the main Lua script to be installed from the repository. This script name doesn't have to include the .lua extension, as it is appended automatically.
-    - [optionalFileName]: Optionally, a second argument can specify the local filename under which the downloaded script will be saved. If omitted, the script saves as <programName>.lua.
+-- Define repository URLs
+local repo_url_base = "https://raw.githubusercontent.com/bngarren/computer-craft/master/src"
+local repo_url_common = repo_url_base .. "/common"
+local installRootPath = "/bng"
+local installCommonPath = installRootPath .. "/common"
+local installProgramsPath = installRootPath .. "/programs"
+local localManifestFile = installCommonPath .. "/common_manifest.json"
 
-    Dependencies Handling:
-    Each Lua script that requires other scripts to function must have an associated .deps file with the same name as the main script. 
-    For example, if `scriptX.lua` is the main script, it should have a `scriptX.deps` file in the same directory in the repository.
-    The .deps file contains a list of filenames, each representing a dependency. These files are then downloaded automatically by the installer.
+-- Ensure common modules directory exists
+if not fs.exists(installCommonPath) then fs.makeDir(installCommonPath) end
 
-    Usage Example:
-    Assuming `installer.lua` is saved on a ComputerCraft computer, run it with:
-        `installer <programName> [optionalFileName]`
-    For instance:
-        `installer myScript`
+-- Add `/bng/common/` to package path so Lua can find required modules
+package.path = installCommonPath .. "/?.lua;" .. package.path
 
-    This will download `myScript.lua` and its dependencies as defined in `myScript.deps`, prepare `startup.lua` to run `myScript.lua` on boot, and handle user confirmation for overwrites.
-]]
+-- Function to download a file
+local function downloadFile(url, filePath)
+    local headers = { ["Cache-Control"] = "no-cache, no-store, must-revalidate" }
+    local response = http.get({ url = url, headers = headers })
+    if not response then
+        print("Installer: Error downloading:", url)
+        return false
+    end
 
-local programs = {
-    {name = "Energy Supply", path = "energy-supply.lua"},
-    {name = "Energy Monitor Master", path = "energy-monitor-master.lua"},
-    {name = "Energy Monitor Local", path = "energy-monitor-local.lua"},
-}
-
-local function coloredWrite(text, color)
-    if not term then return end
-    local defaultColor = term.getTextColor()  -- Save the current text color
-    term.setTextColor(color)                  -- Set the new text color
-    write(text.."\n")                               -- Write the text
-    term.setTextColor(defaultColor)           -- Reset the text color back to default
+    local file = fs.open(filePath, "w")
+    file.write(response.readAll())
+    file.close()
+    return true
 end
 
--- Function to display a menu and allow the user to select a program
-local function selectProgram()
-    coloredWrite("Available programs:", colors.lime)
-    for i, program in ipairs(programs) do
-        print(i .. "  ) " .. program.name)
+-- Function to fetch and parse remote JSON files, e.g. manifests
+local function fetchRemoteJSON(url)
+    local headers = { ["Cache-Control"] = "no-cache, no-store, must-revalidate" }
+    local response = http.get({ url = url, headers = headers })
+    if not response then 
+        print("Installer: Error downloading JSON file:", url)
+        return nil 
     end
-    coloredWrite("Select a program to install: ", colors.orange)
-    local input = read()
-    local selection = tonumber(input)
-    if selection and selection >= 1 and selection <= #programs then
-        return programs[selection].path
+    local content = response.readAll()
+    response.close()
+    return textutils.unserializeJSON(content)
+end
+
+-- Function to update local `common_manifest.json`
+-- i.e. When this installer manually installs required modules that are needed for this installer
+-- Otherwise, common modules used by individual programs should be installed/updated by module_manager
+local function updateLocalManifest(moduleName, version)
+    local localManifest = {}
+    if fs.exists(localManifestFile) then
+        local handle = fs.open(localManifestFile, "r")
+        local contents = handle.readAll()
+        handle.close()
+        localManifest = textutils.unserializeJSON(contents) or {}
+    end
+    localManifest[moduleName] = version
+
+    local file = fs.open(localManifestFile, "w")
+    file.write(textutils.serializeJSON(localManifest))
+    file.close()
+end
+
+local isForceUpdate = false
+local args = {...}
+
+-- Check if --force flag is present
+for _, arg in ipairs(args) do
+    if arg == "--force" then
+        isForceUpdate = true
+        print("Installer: Force update mode enabled. All common modules will be overwritten.")
+    end
+end
+
+-- Function to download a module if missing or out-of-date
+-- Ensure `common_manifest.json` is up to date when downloading modules
+local function ensureModuleExists(moduleName, remoteCommonManifest)
+    local modulePath = installCommonPath .. "/" .. moduleName .. ".lua"
+    local remoteVersion = remoteCommonManifest[moduleName]
+
+    local localVersion
+    if fs.exists(localManifestFile) then
+        local f = fs.open(localManifestFile, "r")
+        local manifestData = f.readAll()
+        f.close()
+        local localManifest = textutils.unserializeJSON(manifestData) or {}
+        localVersion = localManifest[moduleName]
+    end
+
+    if not remoteVersion then
+        print("Installer: Error - No version info for", moduleName)
+        return false
+    end
+
+    if not fs.exists(modulePath) then
+        print("Installer: Installing module:", moduleName, " v" .. remoteVersion)
+    elseif localVersion == remoteVersion then
+        print("Installer: Module is up-to-date:", moduleName, " v" .. remoteVersion)
+        return true
     else
-        print("Invalid selection.")
-        return nil
+        print("Installer: Updating module:", moduleName, " v" .. tostring(localVersion) .. " → v" .. remoteVersion)
     end
-end
 
-local args = { ... }
-local scriptName
-
-if #args == 0 then
-    -- No arguments provided, show selection menu
-    scriptName = selectProgram()
-    if not scriptName then
-        return -- Exit if no valid selection is made
+    local url = repo_url_common .. "/" .. moduleName .. ".lua"
+    if not downloadFile(url, modulePath) then
+        print("Installer: ERROR downloading module:", moduleName)
+        return false
     end
-else
-    -- Use the provided argument
-    scriptName = args[1]
+
+    print("Installer: Successfully installed module:", moduleName)
+    updateLocalManifest(moduleName, remoteVersion)
+    return true
 end
 
--- Define the base URL for raw user content on GitHub.
-local baseURL = "https://raw.githubusercontent.com/bngarren/computer-craft/master/src/"
-
--- Check if the scriptName ends with '.lua', append if not
-if not scriptName:match("%.lua$") then
-    scriptName = scriptName .. ".lua"
+-- Fetch latest remote common manifest before bootstrapping
+local remoteCommonManifest = fetchRemoteJSON(repo_url_common .. "/common_manifest.json")
+if not remoteCommonManifest then
+    print("Installer: Failed to retrieve remote common manifest.")
+    return false
 end
 
--- Construct the full URL to the script.
-local scriptURL = baseURL .. scriptName
-
--- Determine a local filename to save the script. This could be derived from the scriptPath,
--- or you could allow the user to specify this as a second argument.
-local filename = args[2] or scriptName
-
--- Check if the file already exists and ask for confirmation to overwrite.
-if fs.exists(filename) then
-    coloredWrite(filename .. " already exists. Overwrite? [y/N]:", colors.orange)
-    local input = read()
-    if input:lower() ~= 'y' then
-        coloredWrite("Installation cancelled.", colors.red)
-        return
-    else
-        fs.delete(filename)
-    end
+-- Ensure core modules are installed
+if not ensureModuleExists("module_manager", remoteCommonManifest) or
+   not ensureModuleExists("updater", remoteCommonManifest) then
+    print("Installer: FATAL - Required core modules missing. Installation cannot proceed.")
+    return false
 end
 
--- Function to download and overwrite a file
-local function downloadFile(fileURL, filename)
-    if fs.exists(filename) then
-        fs.delete(filename)
-    end
-    return shell.run("wget", fileURL, filename)
+-- Optional modules
+if not ensureModuleExists("status", remoteCommonManifest) then
+    print("Installer: WARNING - Could not install status.lua")
 end
 
--- Download the main script
-local success = downloadFile(scriptURL, filename)
-if not success then
-    coloredWrite("Failed to download " .. scriptName, colors.red)
+-- Require installed modules
+local moduleManager = require("module_manager")
+local updater = require("updater")
+
+-- Get command line arguments (re-fetching, ignoring the earlier 'args' in scope)
+local args = {...}
+if #args < 1 then
+    print("Usage: installer <programName> [--version]")
     return
 end
 
--- Check for a .deps file and download dependencies
-local depsFile = scriptName:gsub("%.lua$", ".deps")
-local depsURL = baseURL .. depsFile
-if downloadFile(depsURL, "temp.deps") then
-    local deps = fs.open("temp.deps", "r")
-    local line = deps.readLine()
-    while line do
-        print("Downloading dependency: " .. line)
-        if not downloadFile(baseURL .. line, line) then
-            coloredWrite("Failed to download dependency: " .. line, colors.red)
-            deps.close()
-            return
-        end
-        line = deps.readLine()
+local programName = args[1]
+local installDir = installProgramsPath .. "/" .. programName .. "/"
+local programURL = repo_url_base .. "/programs/" .. programName .. "/"
+local programManifestURL = programURL .. "manifest.json"
+local installManifestFile = installDir .. "install_manifest.json"
+
+-- Fetch remote program manifest
+local remoteProgramManifest = fetchRemoteJSON(programManifestURL)
+if not remoteProgramManifest then
+    print("Installer: Failed to retrieve manifest for:", programName)
+    return
+end
+
+-- Install Dependencies (Pass `isForceUpdate` to moduleManager)
+if remoteProgramManifest.dependencies then
+    local result = moduleManager.ensureModules(remoteProgramManifest.dependencies, isForceUpdate)
+    if not result then return 1 end
+end
+
+-- Install Program Files
+if not fs.exists(installDir) then fs.makeDir(installDir) end
+
+for _, filename in ipairs(remoteProgramManifest.files) do
+    local fileURL = programURL .. filename
+    local filePath = installDir .. filename
+
+    -- Preserve existing config
+    if filename == "config.lua" and fs.exists(filePath) then
+        print("Installer: Skipping", filename, "(preserving user settings)")
+    else
+        downloadFile(fileURL, filePath)
     end
-    deps.close()
-    fs.delete("temp.deps")
-else
-    print("No dependencies file found or failed to download.")
 end
 
+-- Store Installation Info
+local installManifest = {
+    program = programName,
+    version = remoteProgramManifest.version,
+    files = remoteProgramManifest.files,
+    dependencies = remoteProgramManifest.dependencies,
+    date = os.date("%Y-%m-%d %H:%M:%S")
+}
 
--- Ask the user if they want to update startup.lua to run the new file.
-coloredWrite("Do you want to update startup.lua to only run this file on boot? [y/N]:", colors.orange)
-local updateStartup = read()
-if updateStartup:lower() == 'y' then
-    -- Create or overwrite startup.lua
-    local startupFile = "startup.lua"
-    local file = fs.open(startupFile, "w")
-    file.writeLine("-- Auto-generated startup file to run " .. filename)
-    file.writeLine("shell.run(\"" .. filename .. "\")")
-    file.close()
-    print("Startup script updated to run " .. filename)
-else
-    print("Startup script not modified.")
-end
+local file = fs.open(installManifestFile, "w")
+file.write(textutils.serializeJSON(installManifest))
+file.close()
 
-coloredWrite("Installation complete.", colors.lime)
+print("Installer: Installed '" .. programName .. "' successfully.")
+
+-- Generate `startup.lua` with auto-update checker
+updater.generateStartup(installDir, programName, programURL, installManifestFile)
+
