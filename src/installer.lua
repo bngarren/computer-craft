@@ -117,8 +117,8 @@ local function fullInstallCore(version, requiredModules)
         end
     end
 
-    -- Attemp to download the init.lua file
-    local module = "init"
+    -- Attemp to download the initenv.lua file
+    local module = "initenv"
     local url = getCoreModuleURL(version, module)
     if success and not downloadFile(url, tempPath .. "/" .. module .. ".lua") then
         util.println_c("Could not download `bng-cc-core` module: " .. module, colors.red)
@@ -137,7 +137,9 @@ local function fullInstallCore(version, requiredModules)
     if fs.exists(installCorePath) then fs.delete(installCorePath) end
     fs.move(tempPath, installCorePath)
     updateCoreManifest(version, requiredModules)
-    util.println_c("Successfully installed `bng-cc-core` v" .. version .. " with modules: " .. table.concat(requiredModules, ", "), colors.lightGray)
+    util.println_c(
+    "Successfully installed `bng-cc-core` v" .. version .. " with modules: " .. table.concat(requiredModules, ", "),
+        colors.lightGray)
     return true
 end
 
@@ -205,6 +207,7 @@ local function main(args)
     util.println_c("flags: " .. "--force=" .. tostring(force) .. "\n", colors.white)
     log.info("flags: " .. "--force=" .. tostring(force))
 
+    local success = true
 
     -- Handle `bng-cc-core` installation
     if remoteProgramManifest["bng-cc-core"] then
@@ -226,6 +229,7 @@ local function main(args)
             if not fullInstallCore(requiredCoreVersion, moduleList) then
                 util.println_c("ERROR: Could not complete install of `bng-cc-core`", colors.red)
                 log.error("Failed to install `bng-cc-core`.")
+                success = false
             end
             -- If force flag present, do full install regardless of versions
         elseif force == true then
@@ -234,7 +238,7 @@ local function main(args)
             if not fullInstallCore(requiredCoreVersion, moduleList) then
                 util.println_c("ERROR: Could not install `bng-cc-core`.", colors.red)
                 log.error("Could not install `bng-cc-core`")
-                return
+                success = false
             end
             -- Else, do a version comparison to determine how to proceed
         else
@@ -243,33 +247,37 @@ local function main(args)
                 util.println_c("bng-cc-core v" .. requiredCoreVersion .. " is required and present.", colors.lightGray)
                 log.info("bng-cc-core v" .. requiredCoreVersion .. " is required and present.")
             else
-                log.warn("bng-cc-core version mismatch: " .. installedCoreVersion .. " (installed), " .. requiredCoreVersion .. " (required)")
+                log.warn("bng-cc-core version mismatch: " ..
+                installedCoreVersion .. " (installed), " .. requiredCoreVersion .. " (required)")
                 util.println_c("WARNING: This program requires `bng-cc-core` v" ..
-                requiredCoreVersion .. ", but v" .. installedCoreVersion .. " is installed.", colors.yellow)
+                    requiredCoreVersion .. ", but v" .. installedCoreVersion .. " is installed.", colors.yellow)
                 util.println_c("Would you like to " ..
-                (versionComparison == -1 and "update" or "downgrade") ..
-                " `bng-cc-core` to v" .. requiredCoreVersion .. "? (y/n)", colors.cyan)
-                if io.read() ~= "y" then 
+                    (versionComparison == -1 and "update" or "downgrade") ..
+                    " `bng-cc-core` to v" .. requiredCoreVersion .. "? (y/n)", colors.cyan)
+                if io.read() ~= "y" then
                     util.println_c("Installation aborted due to version mismatch.", colors.white)
                     log.warn("Installation of " .. programName .. " was aborted due to bng-cc-core version mismatch")
                     return
                 else
-                    log.info("Attemping to "..(versionComparison == -1 and "update" or "downgrade").. " bng-cc-core to v" .. requiredCoreVersion)
+                    log.info("Attemping to " ..
+                    (versionComparison == -1 and "update" or "downgrade") .. " bng-cc-core to v" .. requiredCoreVersion)
                 end
                 if not fullInstallCore(requiredCoreVersion, moduleList) then
                     util.println_c("ERROR: Could not install `bng-cc-core`.", colors.red)
                     log.error("Could not install `bng-cc-core`")
-                    return
+                    success = false
                 end
             end
         end
     end
 
     -- Handle program files installation
-    installProgramFiles(programName, remoteProgramManifest, force)
+    if not installProgramFiles(programName, remoteProgramManifest, force) then success = false end
 
-    util.println_c("\n\nProgram `" .. programName .. "` installed successfully.", colors.green)
-    log.info("Program `" .. programName .. "` installed successfully")
+    if success == true then
+        util.println_c("\n\nProgram `" .. programName .. "` installed successfully.", colors.green)
+        log.info("Program `" .. programName .. "` installed successfully")
+    end
 end
 
 -- Version comparison function
