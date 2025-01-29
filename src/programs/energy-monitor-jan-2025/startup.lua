@@ -1,10 +1,14 @@
--- main.lua
--- Main script to monitor an energy cube
+-- startup.lua
+-- Monitor an energy storage
 
-local ppm = require("bng/common/bng-cc-core/ppm")
-local util = require("bng/common/bng-cc-core/util")
+require("/bng.common.bng-cc-core.initenv").init_env()
 
-local config = require("config")
+local ppm = require("bng-cc-core.ppm")
+local util = require("bng-cc-core.util")
+
+local config = require("energy-monitor-jan-2025.config")
+
+
 local coloredWrite = util.coloredWrite
 
 
