@@ -102,6 +102,8 @@ local function fullInstallCore(version, requiredModules)
     if fs.exists(tempPath) then fs.delete(tempPath) end
     fs.makeDir(tempPath)
 
+    local success
+
     -- Attempt to download all modules first
     for _, module in ipairs(requiredModules) do
         local url = getCoreModuleURL(version, module)
@@ -109,9 +111,26 @@ local function fullInstallCore(version, requiredModules)
         if not downloadFile(url, filePath) then
             util.println_c("Could not download `bng-cc-core` module: " .. module, colors.red)
             log.error("Failed to download `bng-cc-core` module: " .. module)
-            fs.delete(tempPath)
-            return false
+            success = false
+        else
+            success = true
         end
+    end
+
+    -- Attemp to download the init.lua file
+    local module = "init"
+    local url = getCoreModuleURL(version, module)
+    if success and not downloadFile(url, tempPath .. "/" .. module .. ".lua") then
+        util.println_c("Could not download `bng-cc-core` module: " .. module, colors.red)
+        log.error("Failed to download `bng-cc-core` module: " .. module)
+        success = false
+    else
+        success = true
+    end
+
+    if not success then
+        fs.delete(tempPath)
+        return false
     end
 
     -- If all downloads succeeded, remove the old installation and move the new one into place
@@ -183,6 +202,9 @@ local function main(args)
     util.println_c("target: " .. programName .. " " .. (programVersion or "") .. "\n", colors.white)
     log.info("target: " .. programName .. " " .. (programVersion or ""))
 
+    util.println_c("flags: " .. "--force=" .. tostring(force) .. "\n", colors.white)
+    log.info("flags: " .. "--force=" .. tostring(force))
+
 
     -- Handle `bng-cc-core` installation
     if remoteProgramManifest["bng-cc-core"] then
@@ -204,6 +226,15 @@ local function main(args)
             if not fullInstallCore(requiredCoreVersion, moduleList) then
                 util.println_c("ERROR: Could not complete install of `bng-cc-core`", colors.red)
                 log.error("Failed to install `bng-cc-core`.")
+            end
+            -- If force flag present, do full install regardless of versions
+        elseif force == true then
+            util.println_c("INFO: Forcing re-install of `bng-cc-core`", colors.white)
+            log.info("Forcing re-install of `bng-cc-core`")
+            if not fullInstallCore(requiredCoreVersion, moduleList) then
+                util.println_c("ERROR: Could not install `bng-cc-core`.", colors.red)
+                log.error("Could not install `bng-cc-core`")
+                return
             end
             -- Else, do a version comparison to determine how to proceed
         else

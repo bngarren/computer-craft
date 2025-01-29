@@ -3,7 +3,7 @@
   "description": "Monitors an energy storage unit and triggers redstone signals based on fill percentage.",
   "files": ["main.lua", "config.lua"],
   "bng-cc-core": {
-    "version": "0.0.1",
+    "version": "0.0.2",
     "modules": ["util", "ppm"]
   }
 }
