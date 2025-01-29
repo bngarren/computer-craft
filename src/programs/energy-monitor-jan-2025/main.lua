@@ -1,11 +1,12 @@
 -- main.lua
 -- Main script to monitor an energy cube
 
-package.path = "/bng/common/?.lua;" .. package.path
+local core = dofile("bng/common/bng-cc-core/init.lua")
 
-local ppm = require("ppm")
+local ppm = core.ppm
+local util = core.util
+
 local config = require("config")
-local util = require("util")
 local coloredWrite = util.coloredWrite
 
 
