@@ -52,8 +52,13 @@ end
 
 -- Download a file from a URL
 local function downloadFile(url, filePath)
+    log.debug("Downloading file: " .. url)
     local response = http.get({ url = url, headers = { ["Cache-Control"] = "no-cache" } })
-    if not response then return false end
+    if not response then
+        util.println_c("ERROR: Could not download file: " .. url, colors.red)
+        log.error("Failed to download file: " .. url)
+        return false
+    end
     local file = fs.open(filePath, "w")
     file.write(response.readAll())
     file.close()
@@ -61,6 +66,14 @@ local function downloadFile(url, filePath)
 end
 
 local function getCoreModuleURL(version, moduleName)
+    if not version then
+        log.error("Missing 'version' in getCoreModuleURL")
+        return nil
+    elseif not moduleName then
+        log.error("Missing 'module name' in getCoreModuleURL")
+        return nil
+    end
+
     return bng_cc_core_repo_url .. "/refs/tags/v" .. version .. "/src/" .. moduleName .. ".lua"
 end
 
@@ -95,7 +108,7 @@ end
 
 -- Fully install `bng-cc-core` with required modules
 local function fullInstallCore(version, requiredModules)
-    log.debug("Installing `bng-cc-core` v" .. version .. "...")
+    log.info("Installing `bng-cc-core` v" .. version .. "...")
 
     -- Create a temporary directory for the new installation
     local tempPath = installCommonPath .. "/_bng-cc-core"
@@ -138,7 +151,7 @@ local function fullInstallCore(version, requiredModules)
     fs.move(tempPath, installCorePath)
     updateCoreManifest(version, requiredModules)
     util.println_c(
-    "Successfully installed `bng-cc-core` v" .. version .. " with modules: " .. table.concat(requiredModules, ", "),
+        "Successfully installed `bng-cc-core` v" .. version .. " with modules: " .. table.concat(requiredModules, ", "),
         colors.lightGray)
     return true
 end
@@ -175,17 +188,74 @@ local function installProgramFiles(programName, remoteProgramManifest, force)
     return true
 end
 
+local function showHelp()
+    util.println_c("Usage: installer <programName> [--flag]\n", colors.orange)
+    util.println_c(" Global commands:", colors.white)
+    util.println_c("    --help    Show this help message", colors.lightGray)
+    util.println_c(" Flags:", colors.white)
+    util.println_c("    --force    Force download modules/files (even if version matches)", colors.lightGray)
+    util.println("")
+    return nil
+end
+
+local function handleArgs(args)
+    -- Check for global commands
+    if #args < 1 or string.gsub(args[1], "%s+", "") == "" then
+        util.println_c("Usage: installer <programName> [--flag]", colors.orange)
+        return nil
+    end
+
+    local result = {
+        programName = nil,
+        force = false
+    }
+
+    -- Handle global commands
+    if args[1] == "--help" then
+        showHelp()
+        return nil
+    elseif args[1] == "--status" then
+        util.println_c("--status function is not yet implemented!")
+        return nil
+    else
+        -- Handle program-specific commands
+
+        -- Check if the first argument is a flag (starts with "--")
+        if args[1]:sub(1, 2) == "--" then
+            util.println_c("Error: programName cannot start with '--'", colors.red)
+            return nil
+        end
+
+        result.programName = args[1]
+
+        -- Parse flags
+        for i = 2, #args do
+            if args[i] == "--force" then
+                result.force = true
+            elseif args[i] == "--help" then
+                showHelp()
+                return nil
+            else
+                util.println_c("Unknown flag: " .. args[i], colors.red)
+                return nil
+            end
+        end
+    end
+    return result
+end
+
 -- ** ** ** ** Main installer function ** ** ** **
 local function main(args)
     -- init log
     log.init("installer_log.txt", true)
 
-    term.clear()
-
     -- handle command line args (program name and flags)
-    if #args < 1 then return print("Usage: installer <programName> [--force]") end
-    local programName = args[1]
-    local force = args[2] == "--force"
+    local _args = handleArgs(args)
+    if not _args then return end
+    local programName = _args.programName
+    local force = _args.force
+
+    term.clear()
 
     util.println_c("### bng-cc installer", colors.purple)
     log.info("bng-cc installer - begin")
@@ -248,7 +318,7 @@ local function main(args)
                 log.info("bng-cc-core v" .. requiredCoreVersion .. " is required and present.")
             else
                 log.warn("bng-cc-core version mismatch: " ..
-                installedCoreVersion .. " (installed), " .. requiredCoreVersion .. " (required)")
+                    installedCoreVersion .. " (installed), " .. requiredCoreVersion .. " (required)")
                 util.println_c("WARNING: This program requires `bng-cc-core` v" ..
                     requiredCoreVersion .. ", but v" .. installedCoreVersion .. " is installed.", colors.yellow)
                 util.println_c("Would you like to " ..
@@ -260,7 +330,8 @@ local function main(args)
                     return
                 else
                     log.info("Attemping to " ..
-                    (versionComparison == -1 and "update" or "downgrade") .. " bng-cc-core to v" .. requiredCoreVersion)
+                        (versionComparison == -1 and "update" or "downgrade") ..
+                        " bng-cc-core to v" .. requiredCoreVersion)
                 end
                 if not fullInstallCore(requiredCoreVersion, moduleList) then
                     util.println_c("ERROR: Could not install `bng-cc-core`.", colors.red)
