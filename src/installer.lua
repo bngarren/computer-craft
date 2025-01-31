@@ -1,22 +1,29 @@
-local debug = true
+
+
+local config = {
+    debug = true,
+    repo_base_url = "https://raw.githubusercontent.com/bngarren/",
+    install_paths = {
+        root = "/bng",
+        common = "/bng/common",
+        programs = "/bng/programs"
+    },
+    log_path = "installer_log.txt"
+}
 
 -- Utility functions
 local util = {}
 local log = {}
 
--- Define repository URL
+-- Dynamic repository URL based on target branch (master or dev)
 local function getProgramsRepoURL(useDev)
-    return "https://raw.githubusercontent.com/bngarren/computer-craft/" .. (useDev and "dev" or "master") .. "/src"
+    return config.repo_base_url.."computer-craft/" .. (useDev and "dev" or "master") .. "/src"
 end
 
-
-local bng_cc_core_repo_url = "https://raw.githubusercontent.com/bngarren/bng-cc-core"
+local BNG_CC_CORE_REPO_URL = config.repo_base_url.."bng-cc-core"
 
 -- Define installation paths
-local installRootPath = "/bng"
-local installCommonPath = installRootPath .. "/common"
-local installCorePath = installCommonPath .. "/bng-cc-core"
-local installProgramsPath = installRootPath .. "/programs"
+local INSTALL_BNG_CC_CORE_PATH = config.install_paths.common .. "/bng-cc-core"
 
 -- Safely read JSON files
 local function readJSON(filePath)
@@ -36,7 +43,7 @@ local function any_key() os.pullEvent("key_up") end
 -- Update installed.json in bng-cc-core
 local function updateCoreManifest(version, modules)
     local data = { version = version, modules = modules }
-    local file = fs.open(installCorePath .. "/installed.json", "w")
+    local file = fs.open(INSTALL_BNG_CC_CORE_PATH .. "/installed.json", "w")
     file.write(textutils.serializeJSON(data))
     file.close()
 end
@@ -73,7 +80,7 @@ local function downloadFile(url, filePath)
     return true
 end
 
-local function getCoreModuleURL(version, moduleName)
+local function getCoreModuleURL(version, moduleName, useDev)
     if not version then
         log.error("Missing 'version' in getCoreModuleURL")
         return nil
@@ -82,23 +89,27 @@ local function getCoreModuleURL(version, moduleName)
         return nil
     end
 
-    return bng_cc_core_repo_url .. "/refs/tags/v" .. version .. "/src/" .. moduleName .. ".lua"
+    if useDev then
+        return BNG_CC_CORE_REPO_URL .. "/dev/src/" .. moduleName .. ".lua"
+    else
+        return BNG_CC_CORE_REPO_URL .. "/refs/tags/v" .. version .. "/src/" .. moduleName .. ".lua"
+    end
 end
 
 -- Retrieve currently installed bng-cc-core modules
 local function getCurrentCoreModules()
     local currentModules = {}
 
-    if not fs.exists(installCorePath) then
+    if not fs.exists(INSTALL_BNG_CC_CORE_PATH) then
         return currentModules
     end
 
-    local files = fs.list(installCorePath)
+    local files = fs.list(INSTALL_BNG_CC_CORE_PATH)
 
     log.debug("Getting current installed modules in bng-cc-core")
 
     for index, file in ipairs(files) do
-        local filePath = fs.combine(installCorePath, file)
+        local filePath = fs.combine(INSTALL_BNG_CC_CORE_PATH, file)
         log.debug("Checking file: " .. file)
 
         -- **🔹 Ensure we only process .lua files and ignore installed.json**
@@ -115,15 +126,15 @@ local function getCurrentCoreModules()
 end
 
 -- Fully install `bng-cc-core` with required modules
-local function fullInstallCore(version, requiredModules)
-    log.info("Installing `bng-cc-core` v" .. version .. "...")
+local function fullInstallCore(version, requiredModules, dev)
+    log.info("Installing `bng-cc-core` " .. (dev and "(dev)" or version) .. "...")
 
     -- Create a temporary directory for the new installation
-    local tempPath = installCommonPath .. "/_bng-cc-core"
+    local tempPath = config.install_paths.common .. "/_bng-cc-core"
     if fs.exists(tempPath) then fs.delete(tempPath) end
     fs.makeDir(tempPath)
 
-    local success
+    local success = true
 
     -- Attempt to download all modules first
     for _, module in ipairs(requiredModules) do
@@ -133,8 +144,6 @@ local function fullInstallCore(version, requiredModules)
             util.println_c("Could not download `bng-cc-core` module: " .. module, colors.red)
             log.error("Failed to download `bng-cc-core` module: " .. module)
             success = false
-        else
-            success = true
         end
     end
 
@@ -145,8 +154,6 @@ local function fullInstallCore(version, requiredModules)
         util.println_c("Could not download `bng-cc-core` module: " .. module, colors.red)
         log.error("Failed to download `bng-cc-core` module: " .. module)
         success = false
-    else
-        success = true
     end
 
     if not success then
@@ -155,29 +162,42 @@ local function fullInstallCore(version, requiredModules)
     end
 
     -- If all downloads succeeded, remove the old installation and move the new one into place
-    if fs.exists(installCorePath) then fs.delete(installCorePath) end
-    fs.move(tempPath, installCorePath)
-    updateCoreManifest(version, requiredModules)
+    if fs.exists(INSTALL_BNG_CC_CORE_PATH) then fs.delete(INSTALL_BNG_CC_CORE_PATH) end
+    fs.move(tempPath, INSTALL_BNG_CC_CORE_PATH)
+    updateCoreManifest(dev and "dev" or version, requiredModules)
     util.println_c(
-        "Successfully installed `bng-cc-core` v" .. version .. " with modules: " .. table.concat(requiredModules, ", "),
+        "Successfully installed `bng-cc-core` " .. util.get_version_text(dev and "dev" or version) .. " with modules: " .. table.concat(requiredModules, ", "),
         colors.lightGray)
     return true
 end
 
 -- Install program files based on program's manifest.json
 local function installProgramFiles(programName, remoteProgramManifest, force, dev)
-    local installDir = installProgramsPath .. "/" .. programName .. "/"
+    local installDir = config.install_paths.programs .. "/" .. programName .. "/"
     local installedManifestFile = installDir .. "installed.json"
     local installedManifest = readJSON(installedManifestFile)
 
+    if installedManifest then
+        local alreadyExistsMsg = programName.." v"..installedManifest.version.." already exists."
+        log.info(alreadyExistsMsg)
+        util.println_c(alreadyExistsMsg, colors.yellow)
+        local res = util.ask_y_n("Proceed", true)
+        if not res then
+            log.info("Did not proceed")
+            return false
+        end
+        log.info("Overwriting `"..programName.."`")
+    end
+
     if not fs.exists(installDir) then fs.makeDir(installDir) end
 
+    local programsURL = getProgramsRepoURL(dev) .. "/programs/".. programName
+
     for _, file in ipairs(remoteProgramManifest.files) do
-        local fileURL = getProgramsRepoURL(dev) .. "/programs/" .. programName .. "/" .. file
+        local fileURL = programsURL .. "/" .. file
         local filePath = installDir .. file
 
         if force or not fs.exists(filePath) or installedManifest.version ~= remoteProgramManifest.version then
-            log.info("Downloading: " .. file)
             if not downloadFile(fileURL, filePath) then
                 util.println_c("Could not download " .. file, colors.red)
                 log.error("Failed to download " .. file)
@@ -190,8 +210,12 @@ local function installProgramFiles(programName, remoteProgramManifest, force, de
 
     -- Update installed.json
     local file = fs.open(installedManifestFile, "w")
-    file.write(textutils.serializeJSON({ version = remoteProgramManifest.version, files = remoteProgramManifest.files }))
+    file.write(textutils.serializeJSON({ version = remoteProgramManifest.version, files = remoteProgramManifest.files, dev =
+    dev }))
     file.close()
+
+    log.debug("Installed program files from: " .. programsURL)
+    util.println_c("Program files installed and manifest updated", colors.lightGray)
 
     return true
 end
@@ -258,7 +282,7 @@ end
 -- ** ** ** ** Main installer function ** ** ** **
 local function main(args)
     -- init log
-    log.init("installer_log.txt", true)
+    log.init(config.log_path, config.debug)
 
     -- handle command line args (program name and flags)
     local _args = handleArgs(args)
@@ -286,20 +310,25 @@ local function main(args)
     util.println_c("target: " .. programName .. " " .. (programVersion or "") .. "\n", colors.white)
     log.info("target: " .. programName .. " " .. (programVersion or ""))
 
-    util.println_c("flags: "
-        .. "--force=" .. tostring(force) .. "\n"
-        .. "--dev=" .. tostring(dev) .. "\n",
+    util.println_c("flags:\n"
+        .. "  --force=" .. tostring(force) .. "\n"
+        .. "  --dev=" .. tostring(dev) .. "\n",
         colors.white)
-    log.info("flags: " .. "--force=" .. tostring(force))
+    log.info("flags: " .. "--force=" .. tostring(force) .. " --dev=" .. tostring(dev))
 
     local success = true
 
+    -- Handle program files installation
+    if not installProgramFiles(programName, remoteProgramManifest, force, dev) then 
+        success = false 
+    end
+
     -- Handle `bng-cc-core` installation
-    if remoteProgramManifest["bng-cc-core"] then
+    if success and remoteProgramManifest["bng-cc-core"] then
         local requiredCore = remoteProgramManifest["bng-cc-core"]
         local requiredCoreVersion = requiredCore.version
         local requiredModules = requiredCore.modules or {}
-        local installedCore = readJSON(installCorePath .. "/installed.json")
+        local installedCore = readJSON(INSTALL_BNG_CC_CORE_PATH .. "/installed.json")
         local installedCoreVersion = installedCore.version
 
         local currentCoreModules = getCurrentCoreModules()
@@ -318,9 +347,9 @@ local function main(args)
             end
             -- If force flag present, do full install regardless of versions
         elseif force == true then
-            util.println_c("INFO: Forcing re-install of `bng-cc-core`", colors.white)
+            util.println_c("Forcing re-install of `bng-cc-core`...", colors.white)
             log.info("Forcing re-install of `bng-cc-core`")
-            if not fullInstallCore(requiredCoreVersion, moduleList) then
+            if not fullInstallCore(requiredCoreVersion, moduleList, dev) then
                 util.println_c("ERROR: Could not install `bng-cc-core`.", colors.red)
                 log.error("Could not install `bng-cc-core`")
                 success = false
@@ -328,18 +357,22 @@ local function main(args)
             -- Else, do a version comparison to determine how to proceed
         else
             local versionComparison = util.compare_versions(installedCoreVersion, requiredCoreVersion)
+
+            local requiredCoreVersionText = util.get_version_text(requiredCoreVersion)
+            local installedCoreVersionText = util.get_version_text(installedCoreVersion)
+
             if versionComparison == 0 then
-                util.println_c("bng-cc-core v" .. requiredCoreVersion .. " is required and present.", colors.lightGray)
-                log.info("bng-cc-core v" .. requiredCoreVersion .. " is required and present.")
+                util.println_c("bng-cc-core " .. requiredCoreVersionText .. " is required and present.", colors.lightGray)
+                log.info("bng-cc-core " .. requiredCoreVersionText .. " is required and present.")
             else
                 log.warn("bng-cc-core version mismatch: " ..
                     installedCoreVersion .. " (installed), " .. requiredCoreVersion .. " (required)")
-                util.println_c("WARNING: This program requires `bng-cc-core` v" ..
-                    requiredCoreVersion .. ", but v" .. installedCoreVersion .. " is installed.", colors.yellow)
+                util.println_c("WARNING: This program requires `bng-cc-core` " ..
+                    requiredCoreVersionText .. ", but " .. installedCoreVersionText .. " is installed.", colors.yellow)
 
                 local res = util.ask_y_n("Would you like to " ..
                     (versionComparison == -1 and "update" or "downgrade") ..
-                    " `bng-cc-core` to v" .. requiredCoreVersion, true)
+                    " `bng-cc-core` to " .. requiredCoreVersionText, true)
 
                 if not res then
                     util.println_c("Installation aborted due to version mismatch.", colors.white)
@@ -350,7 +383,7 @@ local function main(args)
                         (versionComparison == -1 and "update" or "downgrade") ..
                         " bng-cc-core to v" .. requiredCoreVersion)
                 end
-                if not fullInstallCore(requiredCoreVersion, moduleList) then
+                if not fullInstallCore(requiredCoreVersion, moduleList, dev) then
                     util.println_c("ERROR: Could not install `bng-cc-core`.", colors.red)
                     log.error("Could not install `bng-cc-core`")
                     success = false
@@ -359,40 +392,63 @@ local function main(args)
         end
     end
 
-    -- Handle program files installation
-    if not installProgramFiles(programName, remoteProgramManifest, force, dev) then success = false end
-
     if success == true then
-        util.println_c("\n\nProgram `" .. programName .. "` installed successfully.", colors.green)
-        log.info("Program `" .. programName .. "` installed successfully")
+        local msg = "Program `" .. programName .. "` v"..programVersion.." ("..(dev and "dev" or "master")..") installed successfully"
+        util.println_c("\n\n"..msg, colors.green)
+        log.info(msg)
     end
 end
 
 -- Version comparison function
 function util.compare_versions(versionA, versionB)
-    local function parse_version(version) return version:match("^(%d+)%.(%d+)%.(%d+)$") end
+    -- Handle "dev" as a special case
+    if versionA == "dev" and versionB == "dev" then
+        return 0  -- Both are "dev"
+    elseif versionA == "dev" then
+        return 1  -- "dev" is newer than any stable version
+    elseif versionB == "dev" then
+        return -1 -- Any stable version is older than "dev"
+    end
+
+    -- Compare stable versions
+    local function parse_version(version)
+        version = version:gsub("[^%d.]", "")  -- Strip non-numeric characters
+        return version:match("^(%d+)%.(%d+)%.(%d+)$")
+    end
+
     local a1, a2, a3 = parse_version(versionA)
     local b1, b2, b3 = parse_version(versionB)
+
     if a1 ~= b1 then return a1 > b1 and 1 or -1 end
     if a2 ~= b2 then return a2 > b2 and 1 or -1 end
     if a3 ~= b3 then return a3 > b3 and 1 or -1 end
     return 0
 end
 
+function util.get_version_text(version)
+    if version == "dev" then
+        return "dev"
+    else
+        return "v"..version
+    end
+end
+
 -- ask the user yes or no
 function util.ask_y_n(question, default)
-    print(question)
-    if default == true then print(" (Y/n)? ") else print(" (y/N)? ") end
-    local response = read(); any_key()
-    if response == "" then
-        print(default and "Y" or "N")
-        return default
-    elseif response == "Y" or response == "y" then
-        return true
-    elseif response == "N" or response == "n" then
-        return false
-    else
-        return nil
+    while true do
+        print(question .. (default == true and " (Y/n)? " or " (y/N)? "))
+        local response = read()
+        any_key()
+        if response == "" then
+            print(default and "Y" or "N")
+            return default
+        elseif response:lower() == "y" then
+            return true
+        elseif response:lower() == "n" then
+            return false
+        else
+            print("Invalid input. Please enter 'Y' or 'N'.")
+        end
     end
 end
 
@@ -414,7 +470,7 @@ end
 
 --- Prints the message only if debug = true
 function util.print_debug(msg)
-    if debug then
+    if config.debug then
         util.println(msg)
     end
 end
