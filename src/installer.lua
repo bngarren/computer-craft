@@ -6,7 +6,7 @@ local log = {}
 
 -- Define repository URL
 local function getProgramsRepoURL(useDev)
-    return "https://raw.githubusercontent.com/bngarren/computer-craft/"..(useDev and "dev" or "master").."/src"
+    return "https://raw.githubusercontent.com/bngarren/computer-craft/" .. (useDev and "dev" or "master") .. "/src"
 end
 
 
@@ -165,7 +165,7 @@ local function fullInstallCore(version, requiredModules)
 end
 
 -- Install program files based on program's manifest.json
-local function installProgramFiles(programName, remoteProgramManifest, force)
+local function installProgramFiles(programName, remoteProgramManifest, force, dev)
     local installDir = installProgramsPath .. "/" .. programName .. "/"
     local installedManifestFile = installDir .. "installed.json"
     local installedManifest = readJSON(installedManifestFile)
@@ -173,7 +173,7 @@ local function installProgramFiles(programName, remoteProgramManifest, force)
     if not fs.exists(installDir) then fs.makeDir(installDir) end
 
     for _, file in ipairs(remoteProgramManifest.files) do
-        local fileURL = getProgramsRepoURL() .. "/programs/" .. programName .. "/" .. file
+        local fileURL = getProgramsRepoURL(dev) .. "/programs/" .. programName .. "/" .. file
         local filePath = installDir .. file
 
         if force or not fs.exists(filePath) or installedManifest.version ~= remoteProgramManifest.version then
@@ -215,7 +215,8 @@ local function handleArgs(args)
 
     local result = {
         programName = nil,
-        force = false
+        force = false,
+        dev = false,
     }
 
     -- Handle global commands
@@ -240,6 +241,8 @@ local function handleArgs(args)
         for i = 2, #args do
             if args[i] == "--force" then
                 result.force = true
+            elseif args[i] == "--dev" then
+                result.dev = true
             elseif args[i] == "--help" then
                 showHelp()
                 return nil
@@ -262,13 +265,14 @@ local function main(args)
     if not _args then return end
     local programName = _args.programName
     local force = _args.force
+    local dev = _args.dev
 
     term.clear()
 
     util.println_c("### bng-cc installer", colors.purple)
     log.info("bng-cc installer - begin")
 
-    local programURL = getProgramsRepoURL() .. "/programs/" .. programName .. "/"
+    local programURL = getProgramsRepoURL(dev) .. "/programs/" .. programName .. "/"
     local programManifestURL = programURL .. "manifest.json"
 
     local remoteProgramManifest = fetchRemoteJSON(programManifestURL)
@@ -282,7 +286,10 @@ local function main(args)
     util.println_c("target: " .. programName .. " " .. (programVersion or "") .. "\n", colors.white)
     log.info("target: " .. programName .. " " .. (programVersion or ""))
 
-    util.println_c("flags: " .. "--force=" .. tostring(force) .. "\n", colors.white)
+    util.println_c("flags: "
+        .. "--force=" .. tostring(force) .. "\n"
+        .. "--dev=" .. tostring(dev) .. "\n",
+        colors.white)
     log.info("flags: " .. "--force=" .. tostring(force))
 
     local success = true
@@ -329,7 +336,7 @@ local function main(args)
                     installedCoreVersion .. " (installed), " .. requiredCoreVersion .. " (required)")
                 util.println_c("WARNING: This program requires `bng-cc-core` v" ..
                     requiredCoreVersion .. ", but v" .. installedCoreVersion .. " is installed.", colors.yellow)
-                
+
                 local res = util.ask_y_n("Would you like to " ..
                     (versionComparison == -1 and "update" or "downgrade") ..
                     " `bng-cc-core` to v" .. requiredCoreVersion, true)
@@ -353,7 +360,7 @@ local function main(args)
     end
 
     -- Handle program files installation
-    if not installProgramFiles(programName, remoteProgramManifest, force) then success = false end
+    if not installProgramFiles(programName, remoteProgramManifest, force, dev) then success = false end
 
     if success == true then
         util.println_c("\n\nProgram `" .. programName .. "` installed successfully.", colors.green)
@@ -376,15 +383,17 @@ end
 function util.ask_y_n(question, default)
     print(question)
     if default == true then print(" (Y/n)? ") else print(" (y/N)? ") end
-    local response = read();any_key()
-    if response == "" then 
+    local response = read(); any_key()
+    if response == "" then
         print(default and "Y" or "N")
         return default
-    elseif response == "Y" or response == "y" then 
+    elseif response == "Y" or response == "y" then
         return true
-    elseif response == "N" or response == "n" then 
+    elseif response == "N" or response == "n" then
         return false
-    else return nil end
+    else
+        return nil
+    end
 end
 
 -- Printing
