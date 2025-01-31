@@ -5,7 +5,11 @@ local util = {}
 local log = {}
 
 -- Define repository URL
-local programs_repo_url = "https://raw.githubusercontent.com/bngarren/computer-craft/master/src"
+local function getProgramsRepoURL(useDev)
+    return "https://raw.githubusercontent.com/bngarren/computer-craft/"..(useDev and "dev" or "master").."/src"
+end
+
+
 local bng_cc_core_repo_url = "https://raw.githubusercontent.com/bngarren/bng-cc-core"
 
 -- Define installation paths
@@ -24,6 +28,10 @@ local function readJSON(filePath)
     end
     return {}
 end
+
+
+-- wait for any key to be pressed
+local function any_key() os.pullEvent("key_up") end
 
 -- Update installed.json in bng-cc-core
 local function updateCoreManifest(version, modules)
@@ -165,7 +173,7 @@ local function installProgramFiles(programName, remoteProgramManifest, force)
     if not fs.exists(installDir) then fs.makeDir(installDir) end
 
     for _, file in ipairs(remoteProgramManifest.files) do
-        local fileURL = programs_repo_url .. "/programs/" .. programName .. "/" .. file
+        local fileURL = getProgramsRepoURL() .. "/programs/" .. programName .. "/" .. file
         local filePath = installDir .. file
 
         if force or not fs.exists(filePath) or installedManifest.version ~= remoteProgramManifest.version then
@@ -260,7 +268,7 @@ local function main(args)
     util.println_c("### bng-cc installer", colors.purple)
     log.info("bng-cc installer - begin")
 
-    local programURL = programs_repo_url .. "/programs/" .. programName .. "/"
+    local programURL = getProgramsRepoURL() .. "/programs/" .. programName .. "/"
     local programManifestURL = programURL .. "manifest.json"
 
     local remoteProgramManifest = fetchRemoteJSON(programManifestURL)
@@ -321,10 +329,12 @@ local function main(args)
                     installedCoreVersion .. " (installed), " .. requiredCoreVersion .. " (required)")
                 util.println_c("WARNING: This program requires `bng-cc-core` v" ..
                     requiredCoreVersion .. ", but v" .. installedCoreVersion .. " is installed.", colors.yellow)
-                util.println_c("Would you like to " ..
+                
+                local res = util.ask_y_n("Would you like to " ..
                     (versionComparison == -1 and "update" or "downgrade") ..
-                    " `bng-cc-core` to v" .. requiredCoreVersion .. "? (y/n)", colors.cyan)
-                if io.read() ~= "y" then
+                    " `bng-cc-core` to v" .. requiredCoreVersion, true)
+
+                if not res then
                     util.println_c("Installation aborted due to version mismatch.", colors.white)
                     log.warn("Installation of " .. programName .. " was aborted due to bng-cc-core version mismatch")
                     return
@@ -360,6 +370,21 @@ function util.compare_versions(versionA, versionB)
     if a2 ~= b2 then return a2 > b2 and 1 or -1 end
     if a3 ~= b3 then return a3 > b3 and 1 or -1 end
     return 0
+end
+
+-- ask the user yes or no
+function util.ask_y_n(question, default)
+    print(question)
+    if default == true then print(" (Y/n)? ") else print(" (y/N)? ") end
+    local response = read();any_key()
+    if response == "" then 
+        print(default and "Y" or "N")
+        return default
+    elseif response == "Y" or response == "y" then 
+        return true
+    elseif response == "N" or response == "n" then 
+        return false
+    else return nil end
 end
 
 -- Printing
