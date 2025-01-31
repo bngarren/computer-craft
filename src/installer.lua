@@ -186,11 +186,12 @@ local function installProgramFiles(programName, remoteProgramManifest, force, de
     end
     
     local installDir = config.install_paths.programs .. "/" .. programName .. "/"
-    local installedManifestFile = installDir .. "installed.json"
-    local installedManifest = readJSON(installedManifestFile)
+    local installedProgramManifestFile = installDir .. "installed.json"
+    local installedProgramManifest = readJSON(installedProgramManifestFile)
+    local installedProgramVersion = installedProgramManifest.version
 
-    if next(installedManifest) ~= nil then
-        local alreadyExistsMsg = programName .. " " .. util.get_version_text(installedManifest.version) .. " already exists."
+    if next(installedProgramManifest) ~= nil then
+        local alreadyExistsMsg = programName .. " " .. util.get_version_text(installedProgramManifest.version) .. " already exists."
         log.info(alreadyExistsMsg)
         util.println_c(alreadyExistsMsg, colors.yellow)
         local res = util.ask_y_n("Proceed", true)
@@ -209,7 +210,7 @@ local function installProgramFiles(programName, remoteProgramManifest, force, de
         local fileURL = programsURL .. "/" .. file
         local filePath = installDir .. file
 
-        if force or not fs.exists(filePath) or installedManifest.version ~= remoteProgramManifest.version then
+        if force or dev or not fs.exists(filePath) or installedProgramVersion ~= remoteProgramManifest.version then
             if not downloadFile(fileURL, filePath) then
                 util.println_c("Could not download " .. file, colors.red)
                 log.error("Failed to download " .. file)
@@ -221,7 +222,7 @@ local function installProgramFiles(programName, remoteProgramManifest, force, de
     end
 
     -- Update installed.json
-    local file = fs.open(installedManifestFile, "w")
+    local file = fs.open(installedProgramManifestFile, "w")
     file.write(textutils.serializeJSON({
         version = remoteProgramManifest.version,
         files = remoteProgramManifest.files,
@@ -363,9 +364,10 @@ local function main(args)
                 success = false
             end
             -- If force flag present, do full install regardless of versions
-        elseif force == true then
-            util.println_c("Forcing re-install of `bng-cc-core`...", colors.white)
-            log.info("Forcing re-install of `bng-cc-core`")
+            -- If dev flag present, do full install as there could have been remote changes on dev branch
+        elseif force == true or dev == true then
+            util.println_c("Forcing re-download of `bng-cc-core`...", colors.white)
+            log.info("Forcing re-download of `bng-cc-core`")
             if not fullInstallCore(requiredCoreVersion, moduleList) then
                 util.println_c("ERROR: Could not install `bng-cc-core`.", colors.red)
                 log.error("Could not install `bng-cc-core`")
