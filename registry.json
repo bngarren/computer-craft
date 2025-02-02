@@ -1,0 +1,32 @@
+{
+    "programs": [
+        {
+            "name": "base-energy-monitor",
+            "title": "Base Energy Monitoring System",
+            "description": "Advanced monitoring for energy storage",
+            "version": "0.0.1",
+            "author": "bngarren",
+            "license": "MIT",
+            "files": [
+                {
+                    "url": "https://raw.githubusercontent.com/bngarren/computer-craft/master/programs/energy-monitor-jan-2025/main.lua",
+                    "path": "main.lua"
+                },
+                {
+                    "url": "https://raw.githubusercontent.com/bngarren/computer-craft/master/programs/energy-monitor-jan-2025/config.lua",
+                    "path": "config.lua"
+                }
+            ],
+            "dependencies": [
+                {
+                    "type": "library",
+                    "name": "telem",
+                    "version": "^0.8.0",
+                    "files": {
+                        "telem": "/common/telem"
+                    }
+                }
+            ]
+        }
+    ]
+}
