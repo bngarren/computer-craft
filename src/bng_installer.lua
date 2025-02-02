@@ -426,7 +426,10 @@ function Installer:loadConfig()
     end
     return {
         installedPrograms = {},
-        coreVersion = nil
+        core = {
+            version = nil,
+            installedAt = nil,
+        }
     }
 end
 
@@ -476,16 +479,24 @@ function Installer:downloadFile(url, path, currentProgress)
 end
 
 function Installer:checkCoreRequirements(program)
+    self.log.debug("Checking core requirements for %s", program.name)
 
     -- Check if core is installed at correct version
     local config = self:loadConfig()
     local requiredVersion = program.core.version
     local requiredModules = program.core.modules
 
+    -- If dev version is installed, consider it compatible with everything
+    if config.core.version == "dev" then
+        self.log.debug("Dev version installed, considering compatible")
+        return true
+    end
+
     -- Version check
-    if not config.coreVersion or config.coreVersion ~= requiredVersion then
+    if not config.core.version or self:compareVersions(config.core.version, requiredVersion) ~= 0 then
         local message = string.format("Core library v%s required (current: %s)", 
-            requiredVersion, config.coreVersion or "none")
+            requiredVersion, config.core.version or "none")
+        self.log.info(message)
         return false, message
     end
 
@@ -523,10 +534,49 @@ function Installer:checkCoreRequirements(program)
         for _, m in ipairs(missingModules) do
             message = message .. "["..m.."] "
         end
-        return false, string.format(message)
+        self.log.info(message)
+        return false, message
     end
 
+    self.log.debug("All core requirements met")
     return true
+end
+
+function Installer:compareVersions(v1, v2)
+    -- Handle dev branch comparison
+    if v1 == "dev" or v2 == "dev" then
+        return 0  -- Consider dev version equal to anything for comparison
+    end
+    
+    -- Parse semantic versions
+    local function parseVersion(v)
+        local major, minor, patch = v:match("(%d+)%.(%d+)%.(%d+)")
+        return {
+            tonumber(major) or 0,
+            tonumber(minor) or 0,
+            tonumber(patch) or 0
+        }
+    end
+    
+    local v1parts = parseVersion(v1)
+    local v2parts = parseVersion(v2)
+    
+    for i = 1, 3 do
+        if v1parts[i] > v2parts[i] then return 1
+        elseif v1parts[i] < v2parts[i] then return -1 end
+    end
+    return 0
+end
+
+function Installer:constructCoreUrl(version)
+    if version == "dev" then
+        return "https://raw.githubusercontent.com/bngarren/bng-cc-core/dev/src"
+    else
+        return string.format(
+            "https://raw.githubusercontent.com/bngarren/bng-cc-core/refs/tags/v%s/src",
+            version
+        )
+    end
 end
 
 function Installer:installCore(version, modules)
@@ -536,16 +586,21 @@ function Installer:installCore(version, modules)
     local statusBox = ui.textBox(currentTerm, self.boxSizing.mainPadding, 6, self.boxSizing.contentBox, 1,
                                  "Installing core...")
 
-    -- URLs for different core versions
-    local coreBaseUrl = string.format("https://raw.githubusercontent.com/bngarren/bng-cc-core/refs/tags/v%s/src",
-                                      version)
+    -- Construct correct URL based on version
+    local coreBaseUrl = self:constructCoreUrl(version)
+
+    self.log.info("Installing bng-cc-core v%s from %s", version, coreBaseUrl)
 
     -- Track steps for progress bar
     local totalSteps = #modules
     local currentStep = 0
 
-    -- Create core directory if it doesn't exist
-    fs.makeDir(self.BASE_PATH .. "/common/bng-cc-core")
+    -- Create/clean core directory
+    local corePath = self.BASE_PATH .. "/common/bng-cc-core"
+    if fs.exists(corePath) then
+        fs.delete(corePath)
+    end
+    fs.makeDir(corePath)
 
     -- Download each required module
     for _, moduleName in ipairs(modules) do
@@ -558,10 +613,15 @@ function Installer:installCore(version, modules)
         end)
     end
 
-    -- Save core version to config
+    -- Update config with core details
     local config = self:loadConfig()
-    config.coreVersion = version
+    config.core = {
+        version = version,
+        installedAt = os.epoch("utc"),
+    }
     self:saveConfig(config)
+    
+    self.log.info("Core installation complete")
 end
 
 function Installer:installDependency(dep, progressCallback)
@@ -685,29 +745,75 @@ function Installer:showProgramSelector(programs)
     end
 end
 
-function Installer:showCoreVersionSelector()
+function Installer:showCoreVersionSelector(requiredVersion)
+    self.log.debug("Showing core version selector. Required version: %s", requiredVersion)
     ui.clear()
 
-    ui.textBox(term.current(), self.boxSizing.mainPadding, 2, self.boxSizing.contentBox, 3, "Select BNG Core version:")
+    local currentVersion = self:loadConfig().core.version or "none"
+    
+    ui.textBox(
+        term.current(), 
+        self.boxSizing.mainPadding, 
+        2, 
+        self.boxSizing.contentBox, 
+        3, 
+        string.format("Select bng-cc-core Version\nCurrent: %s", currentVersion)
+    )
 
-    local options = {"Stable (Latest Release)", "Development (Main Branch)"}
+    local options = {
+        string.format("v%s (Required)", requiredVersion),
+        "Development Branch (Latest)"
+    }
 
-    local descriptions = {"Use the latest stable release of bng-cc-core",
-                          "Use the latest development version from main branch"}
+    local descriptions = {
+        string.format(
+            "Install core v%s - this is the version required by the selected program.\nThis version will be downloaded from the corresponding GitHub release.", 
+            requiredVersion
+        ),
+        "Install the latest code from the dev branch.\nWarning: This version may be unstable but will have the latest features and fixes."
+    }
 
-    ui.borderBox(term.current(), self.boxSizing.mainPadding + 1, 6, self.boxSizing.borderBox, 8)
+    ui.borderBox(
+        term.current(), 
+        self.boxSizing.mainPadding + 1, 
+        6, 
+        self.boxSizing.borderBox, 
+        8
+    )
 
-    local descriptionBox = ui.textBox(term.current(), self.boxSizing.mainPadding, 15, self.boxSizing.contentBox, 3,
-                                      descriptions[1])
+    local descriptionBox = ui.textBox(
+        term.current(), 
+        self.boxSizing.mainPadding, 
+        15, 
+        self.boxSizing.contentBox, 
+        5,  -- Increased height to accommodate longer descriptions
+        descriptions[1]
+    )
 
-    ui.selectionBox(term.current(), self.boxSizing.mainPadding + 1, 6, self.boxSizing.contentBox, 8, options, "done",
-                    function(opt)
-        descriptionBox(descriptions[opt])
-    end)
+    ui.selectionBox(
+        term.current(), 
+        self.boxSizing.mainPadding + 1, 
+        6, 
+        self.boxSizing.contentBox, 
+        8, 
+        options, 
+        "done",
+        function(opt)
+            descriptionBox(descriptions[opt])
+        end
+    )
 
     local _, _, selection = ui.run()
-
-    return selection == options[1] and "stable" or "dev"
+    
+    local selectedVersion
+    if selection == options[1] then
+        selectedVersion = requiredVersion
+    else
+        selectedVersion = "dev"
+    end
+    
+    self.log.info("Selected core version: %s", selectedVersion)
+    return selectedVersion
 end
 
 function Installer:showComplete(name)
@@ -801,7 +907,8 @@ function Installer:run()
     self:init()
 
     local success, err = pcall(function ()
-        while true do
+        local run = true
+        while run do
             local _, _, selection = self:showMainMenu()
     
             if selection == "Install New Program" then
@@ -812,8 +919,9 @@ function Installer:run()
                         local action = self:confirmInstall(selectedProgram)
     
                         if action == "core" then
+                            local selectedVersion = self:showCoreVersionSelector(selectedProgram.core.version)
                             -- Install required core version and modules
-                            self:installCore(selectedProgram.core.version, selectedProgram.core.modules)
+                            self:installCore(selectedVersion, selectedProgram.core.modules)
                             -- Show installation screen again
                             action = self:confirmInstall(selectedProgram)
                         end
@@ -827,11 +935,14 @@ function Installer:run()
             elseif selection == "Manage Installed Programs" then
                 self:showProgramManager()
             elseif selection == "Exit" then
+                run = false
                 break
             end
         end
     end
     )
+
+    ui.clear()
 
     if not success then
         self.log.error("Installer crashed: %s", err)
@@ -840,7 +951,7 @@ function Installer:run()
 
     -- Cleanup
     self:closeLogger()
-    -- ui.clear()
+
 end
 
 -- Start the installer
