@@ -3,7 +3,7 @@ local ui = (function()
     -- Public domain/CC0
     -- Packaged from https://github.com/MCJack123/PrimeUI
 
-    local a = require"cc.expect".expect;
+    local a = require "cc.expect".expect;
     local b = {}
     do
         local c = {}
@@ -16,9 +16,11 @@ local ui = (function()
             c[#c + 1] = f;
             _, f.filter = coroutine.resume(f.coro)
         end
+
         function b.resolve(...)
             coroutine.yield(c, ...)
         end
+
         function b.clear()
             term.setCursorPos(1, 1)
             term.setCursorBlink(false)
@@ -28,10 +30,12 @@ local ui = (function()
             c = {}
             d = nil
         end
+
         function b.setCursorWindow(g)
             a(1, g, "table", "nil")
             d = g and g.restoreCursor
         end
+
         function b.getWindowPos(g, h, i)
             if g == term then
                 return h, i
@@ -46,6 +50,7 @@ local ui = (function()
             end
             return h, i
         end
+
         function b.run()
             while true do
                 if d then
@@ -95,6 +100,7 @@ local ui = (function()
         g.setCursorPos(h - 1, i + p)
         g.write("\x8D" .. ("\x8C"):rep(o) .. "\x8E")
     end
+
     function b.button(g, h, i, t, u, q, r, v)
         a(1, g, "table")
         a(2, h, "number")
@@ -135,6 +141,7 @@ local ui = (function()
             end
         end)
     end
+
     -- function b.centerLabel(g,h,i,o,t,q,r)a(1,g,"table")a(2,h,"number")a(3,i,"number")a(4,o,"number")a(5,t,"string")q=a(6,q,"number","nil")or colors.white;r=a(7,r,"number","nil")or colors.black;assert(#t<=o,"string is too long")g.setCursorPos(h+math.floor((o-#t)/2),i)g.setTextColor(q)g.setBackgroundColor(r)g.write(t)end;
     -- function b.checkSelectionBox(g,h,i,o,p,D,u,q,r)a(1,g,"table")a(2,h,"number")a(3,i,"number")a(4,o,"number")a(5,p,"number")a(6,D,"table")a(7,u,"function","string","nil")q=a(8,q,"number","nil")or colors.white;r=a(9,r,"number","nil")or colors.black;local E=0;for _ in pairs(D)do E=E+1 end;local F=window.create(g,h,i,o,p)F.setBackgroundColor(r)F.clear()local G=window.create(F,1,1,o-1,E)G.setBackgroundColor(r)G.setTextColor(q)G.clear()local H={}local I,J=1,1;for K,m in pairs(D)do G.setCursorPos(1,I)G.write((m and(m=="R"and"[-] "or"[\xD7] ")or"[ ] ")..K)H[I]={K,not not m}I=I+1 end;if E>p then F.setCursorPos(o,p)F.setBackgroundColor(r)F.setTextColor(q)F.write("\31")end;G.setCursorPos(2,J)G.setCursorBlink(true)b.setCursorWindow(G)local B,C=b.getWindowPos(g,h,i)b.addTask(function()local L=1;while true do local l=table.pack(os.pullEvent())local M;if l[1]=="key"then if l[2]==keys.up then M=-1 elseif l[2]==keys.down then M=1 elseif l[2]==keys.space and D[H[J][1]]~="R"then H[J][2]=not H[J][2]G.setCursorPos(2,J)G.write(H[J][2]and"\xD7"or" ")if type(u)=="string"then b.resolve("checkSelectionBox",u,H[J][1],H[J][2])elseif u then u(H[J][1],H[J][2])else D[H[J][1]]=H[J][2]end;for s,m in ipairs(H)do local N=D[m[1]]=="R"and"R"or m[2]G.setCursorPos(2,s)G.write(N and(N=="R"and"-"or"\xD7")or" ")end;G.setCursorPos(2,J)end elseif l[1]=="mouse_scroll"and l[3]>=B and l[3]<B+o and l[4]>=C and l[4]<C+p then M=l[2]end;if M and(J+M>=1 and J+M<=E)then J=J+M;if J-L<0 or J-L>=p then L=L+M;G.reposition(1,2-L)end;G.setCursorPos(2,J)end;F.setCursorPos(o,1)F.write(L>1 and"\30"or" ")F.setCursorPos(o,p)F.write(L<E-p+1 and"\31"or" ")G.restoreCursor()end end)end;
     -- function b.drawImage(g,h,i,O,P,Q)a(1,g,"table")a(2,h,"number")a(3,i,"number")a(4,O,"string","table")P=a(5,P,"number","nil")or 1;a(6,Q,"boolean","nil")if Q==nil then Q=true end;if type(O)=="string"then local R=assert(fs.open(O,"rb"))local S=R.readAll()R.close()O=assert(textutils.unserialize(S),"File is not a valid BIMG file")end;for T=1,#O[P]do g.setCursorPos(h,i+T-1)g.blit(table.unpack(O[P][T]))end;local U=O[P].palette or O.palette;if Q and U then for s=0,#U do g.setPaletteColor(2^s,table.unpack(U[s]))end end end;
@@ -168,6 +175,7 @@ local ui = (function()
             os.cancelTimer(a6)
         end
     end
+
     function b.keyAction(a8, u)
         a(1, a8, "number")
         a(2, u, "function", "string")
@@ -184,6 +192,7 @@ local ui = (function()
             end
         end)
     end
+
     -- function b.keyCombo(a8,aa,ab,ac,u)a(1,a8,"number")a(2,aa,"boolean")a(3,ab,"boolean")a(4,ac,"boolean")a(5,u,"function","string")b.addTask(function()local ad,ae,af=false,false,false;while true do local x,a9,ag=os.pullEvent()if x=="key"then if a9==a8 and ad==aa and ae==ab and af==ac and not ag then if type(u)=="string"then b.resolve("keyCombo",u)else u()end elseif a9==keys.leftCtrl or a9==keys.rightCtrl then ad=true elseif a9==keys.leftAlt or a9==keys.rightAlt then ae=true elseif a9==keys.leftShift or a9==keys.rightShift then af=true end elseif x=="key_up"then if a9==keys.leftCtrl or a9==keys.rightCtrl then ad=false elseif a9==keys.leftAlt or a9==keys.rightAlt then ae=false elseif a9==keys.leftShift or a9==keys.rightShift then af=false end end end end)end;
     function b.label(g, h, i, t, q, r)
         a(1, g, "table")
@@ -197,6 +206,7 @@ local ui = (function()
         g.setBackgroundColor(r)
         g.write(t)
     end
+
     function b.progressBar(g, h, i, o, q, r, ah)
         a(1, g, "table")
         a(2, h, "number")
@@ -221,6 +231,7 @@ local ui = (function()
         ai(0)
         return ai
     end
+
     -- function b.scrollBox(g,h,i,o,p,ak,al,am,q,r)a(1,g,"table")a(2,h,"number")a(3,i,"number")a(4,o,"number")a(5,p,"number")a(6,ak,"number")a(7,al,"boolean","nil")a(8,am,"boolean","nil")q=a(9,q,"number","nil")or colors.white;r=a(10,r,"number","nil")or colors.black;if al==nil then al=true end;local F=window.create(g==term and term.current()or g,h,i,o,p)F.setBackgroundColor(r)F.clear()local G=window.create(F,1,1,o-(am and 1 or 0),ak)G.setBackgroundColor(r)G.clear()if am then F.setBackgroundColor(r)F.setTextColor(q)F.setCursorPos(o,p)F.write(ak>p and"\31"or" ")end;h,i=b.getWindowPos(g,h,i)b.addTask(function()local L=1;while true do local l=table.pack(os.pullEvent())ak=select(2,G.getSize())local M;if l[1]=="key"and al then if l[2]==keys.up then M=-1 elseif l[2]==keys.down then M=1 end elseif l[1]=="mouse_scroll"and l[3]>=h and l[3]<h+o and l[4]>=i and l[4]<i+p then M=l[2]end;if M and(L+M>=1 and L+M<=ak-p)then L=L+M;G.reposition(1,2-L)end;if am then F.setBackgroundColor(r)F.setTextColor(q)F.setCursorPos(o,1)F.write(L>1 and"\30"or" ")F.setCursorPos(o,p)F.write(L<ak-p and"\31"or" ")end end end)return G end;
     function b.selectionBox(g, h, i, o, p, an, u, ao, q, r)
         a(1, g, "table")
@@ -297,6 +308,7 @@ local ui = (function()
             end
         end)
     end
+
     function b.textBox(g, h, i, o, p, t, q, r)
         a(1, g, "table")
         a(2, h, "number")
@@ -310,6 +322,7 @@ local ui = (function()
         function a2.getSize()
             return o, math.huge
         end
+
         local function ai(au)
             a(1, au, "string")
             a2.setBackgroundColor(r)
@@ -323,22 +336,23 @@ local ui = (function()
         ai(t)
         return ai
     end
+
     -- function b.timeout(a5,u)a(1,a5,"number")a(2,u,"function","string")local a6=os.startTimer(a5)b.addTask(function()while true do local _,a7=os.pullEvent("timer")if a7==a6 then if type(u)=="string"then b.resolve("timeout",u)else u()end end end end)return function()os.cancelTimer(a6)end end;
     return b
 end)()
 
-function dump(o)
+local function dump(o)
     if type(o) == 'table' then
-       local s = '{ '
-       for k,v in pairs(o) do
-          if type(k) ~= 'number' then k = '"'..k..'"' end
-          s = s .. '['..k..'] = ' .. dump(v) .. ','
-       end
-       return s .. '} '
+        local s = '{ '
+        for k, v in pairs(o) do
+            if type(k) ~= 'number' then k = '"' .. k .. '"' end
+            s = s .. '[' .. k .. '] = ' .. dump(v) .. ','
+        end
+        return s .. '} '
     else
-       return tostring(o)
+        return tostring(o)
     end
- end
+end
 
 local Installer = {
     VERSION = "1.0.0",
@@ -347,40 +361,74 @@ local Installer = {
     CONFIG_PATH = "/.bng-config",
     LOG_PATH = "/bng/installer.log",
 
-    boxSizing = {
-        mainPadding = 2
-    },
     LOG_LEVELS = {
         DEBUG = "DEBUG",
         INFO = "INFO",
         WARN = "WARN",
         ERROR = "ERROR"
-    }
+    },
+
+    MAIN_MENU = {
+        options = {
+            INSTALL_PROGRAM = "INSTALL_PROGRAM",
+            MANAGE_PROGRAMS = "MANAGE_PROGRAMS",
+            UPDATE_CORE = "UPDATE_CORE",
+            EXIT = "EXIT"
+        },
+        -- Add an order array to maintain specific menu ordering
+        order = { "INSTALL_PROGRAM", "MANAGE_PROGRAMS", "UPDATE_CORE", "EXIT" },
+        display = {
+            INSTALL_PROGRAM = {
+                text = "Install New Program",
+                description = "Browse and install available BNG programs"
+            },
+            MANAGE_PROGRAMS = {
+                text = "Manage Installed Programs",
+                description = "View, update, or remove installed programs"
+            },
+            UPDATE_CORE = {
+                text = "Update Core Library",
+                description = "Update the BNG core library to the latest version"
+            },
+            EXIT = {
+                text = "Exit",
+                description = "Exit the installer"
+            }
+        }
+    },
+
+    debug = true,
+
+    boxSizing = {
+        mainPadding = 2
+    },
 }
 
 function Installer:initLogger()
     -- Ensure log directory exists
     local logDir = fs.getDir(self.LOG_PATH)
-    if logDir then 
+    if logDir then
         fs.makeDir(logDir)
     end
 
     -- Open log file with w+ (always overwrites file on each run)
     self.logFile = fs.open(self.LOG_PATH, "w+")
-    
+
     -- Create log functions for each level
     self.log = {}
     for level, levelName in pairs(self.LOG_LEVELS) do
+        -- skip debug log if debug = false
+        if level == self.LOG_LEVELS.DEBUG and not self.debug then return end
+
         self.log[level:lower()] = function(msg, ...)
             if self.logFile then
                 local formatted = string.format(msg, ...)
                 local timestamp = os.date("[%Y-%m-%d %H:%M:%S]")
                 local logLine = string.format("%s [%s] %s", timestamp, levelName, formatted)
-                
+
                 -- Write to file
                 self.logFile.writeLine(logLine)
                 self.logFile.flush()
-                
             end
         end
     end
@@ -414,6 +462,17 @@ function Installer:init()
     -- Create base directories
     fs.makeDir(self.PROGRAMS_PATH)
     fs.makeDir(self.COMMON_PATH)
+
+    -- init Main Menu
+    -- Generate the ordered items list using the order array
+    self.MAIN_MENU.items = {}
+    for _, id in ipairs(self.MAIN_MENU.order) do
+        table.insert(self.MAIN_MENU.items, {
+            id = id,
+            text = self.MAIN_MENU.display[id].text,
+            description = self.MAIN_MENU.display[id].description
+        })
+    end
 end
 
 function Installer:loadConfig()
@@ -439,6 +498,8 @@ function Installer:saveConfig(config)
     file.close()
 end
 
+--- Gets the registry.json file from the programs repo. This file lists the available programs and their version info, dependencies, etc.
+--- @return table registry Lua table containing the registry data
 function Installer:fetchRegistry()
     local currentTerm = term.current()
     ui.textBox(currentTerm, self.boxSizing.mainPadding, 6, self.boxSizing.contentBox, 1, "Fetching program registry...")
@@ -494,7 +555,7 @@ function Installer:checkCoreRequirements(program)
 
     -- Version check
     if not config.core.version or self:compareVersions(config.core.version, requiredVersion) ~= 0 then
-        local message = string.format("Core library v%s required (current: %s)", 
+        local message = string.format("Core library v%s required (current: %s)",
             requiredVersion, config.core.version or "none")
         self.log.info(message)
         return false, message
@@ -503,7 +564,7 @@ function Installer:checkCoreRequirements(program)
     -- Get installed modules by scanning directory
     local installedModules = {}
     local corePath = self.COMMON_PATH .. "/bng-cc-core"
-    
+
     if fs.exists(corePath) then
         for _, file in ipairs(fs.list(corePath)) do
             -- Extract module name from filename (remove .lua extension)
@@ -532,7 +593,7 @@ function Installer:checkCoreRequirements(program)
     if #missingModules > 0 then
         local message = "Missing core module(s): "
         for _, m in ipairs(missingModules) do
-            message = message .. "["..m.."] "
+            message = message .. "[" .. m .. "] "
         end
         self.log.info(message)
         return false, message
@@ -545,9 +606,9 @@ end
 function Installer:compareVersions(v1, v2)
     -- Handle dev branch comparison
     if v1 == "dev" or v2 == "dev" then
-        return 0  -- Consider dev version equal to anything for comparison
+        return 0 -- Consider dev version equal to anything for comparison
     end
-    
+
     -- Parse semantic versions
     local function parseVersion(v)
         local major, minor, patch = v:match("(%d+)%.(%d+)%.(%d+)")
@@ -557,13 +618,16 @@ function Installer:compareVersions(v1, v2)
             tonumber(patch) or 0
         }
     end
-    
+
     local v1parts = parseVersion(v1)
     local v2parts = parseVersion(v2)
-    
+
     for i = 1, 3 do
-        if v1parts[i] > v2parts[i] then return 1
-        elseif v1parts[i] < v2parts[i] then return -1 end
+        if v1parts[i] > v2parts[i] then
+            return 1
+        elseif v1parts[i] < v2parts[i] then
+            return -1
+        end
     end
     return 0
 end
@@ -582,9 +646,9 @@ end
 function Installer:installCore(version, modules)
     local currentTerm = term.current()
     local progress = ui.progressBar(currentTerm, self.boxSizing.mainPadding, 8, self.boxSizing.contentBox, nil, nil,
-                                    true)
+        true)
     local statusBox = ui.textBox(currentTerm, self.boxSizing.mainPadding, 6, self.boxSizing.contentBox, 1,
-                                 "Installing core...")
+        "Installing core...")
 
     -- Construct correct URL based on version
     local coreBaseUrl = self:constructCoreUrl(version)
@@ -607,10 +671,11 @@ function Installer:installCore(version, modules)
         statusBox("Downloading core module: " .. moduleName)
 
         local moduleUrl = string.format("%s/%s.lua", coreBaseUrl, moduleName)
-        self:downloadFile(moduleUrl, string.format("%s/common/bng-cc-core/%s.lua", self.BASE_PATH, moduleName), function()
-            currentStep = currentStep + 1
-            progress(currentStep / totalSteps)
-        end)
+        self:downloadFile(moduleUrl, string.format("%s/common/bng-cc-core/%s.lua", self.BASE_PATH, moduleName),
+            function()
+                currentStep = currentStep + 1
+                progress(currentStep / totalSteps)
+            end)
     end
 
     -- Update config with core details
@@ -620,7 +685,7 @@ function Installer:installCore(version, modules)
         installedAt = os.epoch("utc"),
     }
     self:saveConfig(config)
-    
+
     self.log.info("Core installation complete")
 end
 
@@ -631,7 +696,7 @@ end
 function Installer:installProgram(program)
     local currentTerm = term.current()
     local progress = ui.progressBar(currentTerm, self.boxSizing.mainPadding, 8, self.boxSizing.contentBox, nil, nil,
-                                    true)
+        true)
     local statusBox = ui.textBox(currentTerm, self.boxSizing.mainPadding, 6, self.boxSizing.contentBox, 1, "")
 
     -- Create program directory
@@ -672,38 +737,48 @@ function Installer:installProgram(program)
         installedAt = os.epoch("utc")
     }
     self:saveConfig(config)
-
 end
 
 function Installer:showMainMenu()
     ui.clear()
 
     ui.textBox(term.current(), self.boxSizing.mainPadding, 2, self.boxSizing.contentBox, 3,
-               "BNG Installer v" .. self.VERSION .. "\n\nSelect an option:")
+        "BNG Installer v" .. self.VERSION .. "\n\nSelect an option:")
 
-    local options = {"Install New Program", "Manage Installed Programs", "Update Core Library", "Exit"}
+    local display_text = {}
+    local descriptions = {}
+    -- the ui.selectionBox function returns the display text of the selected option so we need to convert this back to the enum (id)
+    local text_to_id = {} -- Map to convert display text back to id
 
-    local descriptions = {"Browse and install available BNG programs", "View, update, or remove installed programs",
-                          "Update the BNG core library to the latest version", "Exit the installer"}
+    for i, item in ipairs(self.MAIN_MENU.items) do
+        table.insert(display_text, item.text)
+        table.insert(descriptions, item.description)
+        text_to_id[item.text] = self.MAIN_MENU.options[item.id] -- Map display text to enum value
+    end
 
     ui.borderBox(term.current(), self.boxSizing.mainPadding + 1, 6, self.boxSizing.borderBox, 8)
 
     local descriptionBox = ui.textBox(term.current(), self.boxSizing.mainPadding, 15, self.boxSizing.contentBox, 3,
-                                      descriptions[1])
+        descriptions[1])
 
-    ui.selectionBox(term.current(), self.boxSizing.mainPadding + 1, 6, self.boxSizing.contentBox, 8, options, "done",
-                    function(opt)
-        descriptionBox(descriptions[opt])
-    end)
+    ui.selectionBox(term.current(), self.boxSizing.mainPadding + 1, 6, self.boxSizing.contentBox, 8, display_text, "done",
+        function(opt)
+            descriptionBox(descriptions[opt])
+        end)
 
-    return ui.run()
+        local action_type, _, selected_text = ui.run()
+    
+        local selected_id = text_to_id[selected_text]
+        self.log.debug("Main menu selection: %s", selected_id)
+    
+        return action_type, _, selected_id
 end
 
 function Installer:showProgramSelector(programs)
     ui.clear()
 
     ui.textBox(term.current(), self.boxSizing.mainPadding, 2, self.boxSizing.contentBox, 3,
-               "Select a program to install:")
+        "Select a program to install:")
 
     -- Create arrays for selection box
     local entries = {}
@@ -723,12 +798,12 @@ function Installer:showProgramSelector(programs)
     ui.borderBox(term.current(), self.boxSizing.mainPadding + 1, 6, self.boxSizing.borderBox, 8)
 
     local descriptionBox = ui.textBox(term.current(), self.boxSizing.mainPadding, 15, self.boxSizing.contentBox, 5,
-                                      descriptions[1])
+        descriptions[1])
 
     ui.selectionBox(term.current(), self.boxSizing.mainPadding + 1, 6, self.boxSizing.contentBox, 8, entries, "done",
-                    function(opt)
-        descriptionBox(descriptions[opt])
-    end)
+        function(opt)
+            descriptionBox(descriptions[opt])
+        end)
 
     local _, _, selection = ui.run()
 
@@ -736,8 +811,7 @@ function Installer:showProgramSelector(programs)
     if selection then
         for _, program in ipairs(programs) do
             if selection:find(program.title, 1, true) then
-
-                self.log.debug("Selected " .. program.name .. "\n".. dump(program))
+                self.log.debug("Selected " .. program.name .. "\n" .. dump(program))
 
                 return program
             end
@@ -750,13 +824,13 @@ function Installer:showCoreVersionSelector(requiredVersion)
     ui.clear()
 
     local currentVersion = self:loadConfig().core.version or "none"
-    
+
     ui.textBox(
-        term.current(), 
-        self.boxSizing.mainPadding, 
-        2, 
-        self.boxSizing.contentBox, 
-        3, 
+        term.current(),
+        self.boxSizing.mainPadding,
+        2,
+        self.boxSizing.contentBox,
+        3,
         string.format("Select bng-cc-core Version\nCurrent: %s", currentVersion)
     )
 
@@ -767,36 +841,36 @@ function Installer:showCoreVersionSelector(requiredVersion)
 
     local descriptions = {
         string.format(
-            "Install core v%s - this is the version required by the selected program.\nThis version will be downloaded from the corresponding GitHub release.", 
+            "Install core v%s - this is the version required by the selected program.\nThis version will be downloaded from the corresponding GitHub release.",
             requiredVersion
         ),
         "Install the latest code from the dev branch.\nWarning: This version may be unstable but will have the latest features and fixes."
     }
 
     ui.borderBox(
-        term.current(), 
-        self.boxSizing.mainPadding + 1, 
-        6, 
-        self.boxSizing.borderBox, 
+        term.current(),
+        self.boxSizing.mainPadding + 1,
+        6,
+        self.boxSizing.borderBox,
         8
     )
 
     local descriptionBox = ui.textBox(
-        term.current(), 
-        self.boxSizing.mainPadding, 
-        15, 
-        self.boxSizing.contentBox, 
-        5,  -- Increased height to accommodate longer descriptions
+        term.current(),
+        self.boxSizing.mainPadding,
+        15,
+        self.boxSizing.contentBox,
+        5, -- Increased height to accommodate longer descriptions
         descriptions[1]
     )
 
     ui.selectionBox(
-        term.current(), 
-        self.boxSizing.mainPadding + 1, 
-        6, 
-        self.boxSizing.contentBox, 
-        8, 
-        options, 
+        term.current(),
+        self.boxSizing.mainPadding + 1,
+        6,
+        self.boxSizing.contentBox,
+        8,
+        options,
         "done",
         function(opt)
             descriptionBox(descriptions[opt])
@@ -804,14 +878,14 @@ function Installer:showCoreVersionSelector(requiredVersion)
     )
 
     local _, _, selection = ui.run()
-    
+
     local selectedVersion
     if selection == options[1] then
         selectedVersion = requiredVersion
     else
         selectedVersion = "dev"
     end
-    
+
     self.log.info("Selected core version: %s", selectedVersion)
     return selectedVersion
 end
@@ -820,7 +894,7 @@ function Installer:showComplete(name)
     ui.clear()
 
     ui.textBox(term.current(), self.boxSizing.mainPadding, 2, self.boxSizing.contentBox, 3,
-               name .. " has been installed successfully!")
+        name .. " has been installed successfully!")
 
     ui.button(term.current(), self.boxSizing.mainPadding, 6, "Continue", "done")
 
@@ -834,7 +908,7 @@ function Installer:showProgramManager()
 
     if not next(config.installedPrograms) then
         ui.textBox(term.current(), self.boxSizing.mainPadding, 2, self.boxSizing.contentBox, 3,
-                   "No programs are currently installed.")
+            "No programs are currently installed.")
 
         ui.button(term.current(), self.boxSizing.mainPadding, 6, "Back", "done")
 
@@ -851,18 +925,18 @@ function Installer:showProgramManager()
     for name, info in pairs(config.installedPrograms) do
         table.insert(entries, name)
         table.insert(descriptions, string.format("Version: %s\nInstalled: %s", info.version,
-                                                 os.date("%Y-%m-%d %H:%M", info.installedAt / 1000)))
+            os.date("%Y-%m-%d %H:%M", info.installedAt / 1000)))
     end
 
     ui.borderBox(term.current(), self.boxSizing.mainPadding + 1, 6, self.boxSizing.borderBox, 8)
 
     local descriptionBox = ui.textBox(term.current(), self.boxSizing.mainPadding, 15, self.boxSizing.contentBox, 3,
-                                      descriptions[1])
+        descriptions[1])
 
     ui.selectionBox(term.current(), self.boxSizing.mainPadding + 1, 6, self.boxSizing.contentBox, 8, entries, "done",
-                    function(opt)
-        descriptionBox(descriptions[opt])
-    end)
+        function(opt)
+            descriptionBox(descriptions[opt])
+        end)
 
     ui.button(term.current(), self.boxSizing.mainPadding, self.boxSizing.contentBox - 4, "Remove", "remove")
 
@@ -887,8 +961,8 @@ function Installer:confirmInstall(program)
     local coreOk, coreMessage = self:checkCoreRequirements(program)
 
     local message = string.format("Program: %s v%s\nAuthor: %s\n\nCore Status: %s\n\nProceed with installation?",
-                                  program.title, program.version, program.author,
-                                  coreOk and "Ready" or "Needs core v" .. program.core.version)
+        program.title, program.version, program.author,
+        coreOk and "Ready" or "Needs core v" .. program.core.version)
 
     ui.textBox(term.current(), self.boxSizing.mainPadding, 2, self.boxSizing.contentBox, 8, message)
 
@@ -903,21 +977,32 @@ function Installer:confirmInstall(program)
     return action
 end
 
-function Installer:run()
+function Installer:run(config)
+    -- Process config
+    if config and type(config) == "table" then
+        self.debug = config.debug or false
+    end
+
     self:init()
 
-    local success, err = pcall(function ()
+    if self.debug then
+        self.log.info("Running in DEBUG mode")
+    else
+        self.log.info("Running in PROD mode")
+    end
+
+    local success, err = pcall(function()
         local run = true
         while run do
             local _, _, selection = self:showMainMenu()
-    
-            if selection == "Install New Program" then
+
+            if selection == self.MAIN_MENU.options.INSTALL_PROGRAM then
                 local registry = self:fetchRegistry()
                 if registry then
                     local selectedProgram = self:showProgramSelector(registry.programs)
                     if selectedProgram then
                         local action = self:confirmInstall(selectedProgram)
-    
+
                         if action == "core" then
                             local selectedVersion = self:showCoreVersionSelector(selectedProgram.core.version)
                             -- Install required core version and modules
@@ -925,16 +1010,18 @@ function Installer:run()
                             -- Show installation screen again
                             action = self:confirmInstall(selectedProgram)
                         end
-    
+
                         if action == "install" then
                             self:installProgram(selectedProgram)
                             self:showComplete(selectedProgram.title)
                         end
                     end
                 end
-            elseif selection == "Manage Installed Programs" then
+            elseif selection == self.MAIN_MENU.options.MANAGE_PROGRAMS then
                 self:showProgramManager()
-            elseif selection == "Exit" then
+            elseif selection == self.MAIN_MENU.options.UPDATE_CORE then
+                
+            elseif selection == self.MAIN_MENU.options.EXIT then
                 run = false
                 break
             end
@@ -947,13 +1034,24 @@ function Installer:run()
     if not success then
         self.log.error("Installer crashed: %s", err)
     end
-    
+
 
     -- Cleanup
     self:closeLogger()
+end
 
+local args = { ... }
+
+local installConfig = {}
+
+if #args > 0 then
+    for _, arg in ipairs(args) do
+        if arg == "--debug" then
+            installConfig.debug = true
+        end
+    end
 end
 
 -- Start the installer
 local installer = Installer
-installer:run()
+installer:run(installConfig)
