@@ -650,10 +650,11 @@ local Installer = {
             INSTALL_PROGRAM = "INSTALL_PROGRAM",
             MANAGE_PROGRAMS = "MANAGE_PROGRAMS",
             UPDATE_CORE = "UPDATE_CORE",
+            REMOVE_ALL = "REMOVE_ALL",
             EXIT = "EXIT"
         },
         -- Add an order array to maintain specific menu ordering
-        order = { "INSTALL_PROGRAM", "MANAGE_PROGRAMS", "UPDATE_CORE", "EXIT" },
+        order = { "INSTALL_PROGRAM", "MANAGE_PROGRAMS", "UPDATE_CORE", "REMOVE_ALL", "EXIT" },
         display = {
             INSTALL_PROGRAM = {
                 text = "Install New Program",
@@ -666,6 +667,10 @@ local Installer = {
             UPDATE_CORE = {
                 text = "Update Core Library",
                 description = "Update the BNG core library to the latest version"
+            },
+            REMOVE_ALL = {
+                text = "Remove All",
+                description = "Remove all bng installed scripts and artifacts"
             },
             EXIT = {
                 text = "Exit",
@@ -861,29 +866,7 @@ function Installer:downloadFile(url, path, currentProgress)
     end
 end
 
-function Installer:checkCoreRequirements(program)
-    self.log.debug("Checking core requirements for %s", program.name)
-
-    -- Check if core is installed at correct version
-    local config = self:loadConfig()
-    local requiredVersion = program.core.version
-    local requiredModules = program.core.modules
-
-    -- If dev version is installed, consider it compatible with everything
-    if config.core.version == "dev" then
-        self.log.debug("Dev version installed, considering compatible")
-        return true
-    end
-
-    -- Version check
-    if not config.core.version or self.compareVersions(config.core.version, requiredVersion) ~= 0 then
-        local message = string.format("Core library v%s required (current: %s)", requiredVersion,
-            config.core.version or "none")
-        self.log.info(message)
-        return false, message
-    end
-
-    -- Get installed modules by scanning directory
+function Installer:getInstalledCoreModules()
     local installedModules = {}
     local corePath = self.COMMON_PATH .. "/bng-cc-core"
 
@@ -896,6 +879,33 @@ function Installer:checkCoreRequirements(program)
             end
         end
     end
+    self.log.debug("Installed core modules: %s", dump(installedModules))
+    return installedModules
+end
+
+function Installer:checkCoreRequirements(program)
+    self.log.debug("Checking core requirements for %s", program.name)
+
+    -- Check if core is installed at correct version
+    local config = self:loadConfig()
+    local requiredVersion = program.core.version
+    local requiredModules = program.core.modules
+
+    -- If dev version is installed, consider it compatible with everything
+    if config.core.version == "dev" then
+        self.log.debug("Dev version installed, considering compatible")
+    else
+        -- Else do a Version check
+        if not config.core.version or self.compareVersions(config.core.version, requiredVersion) ~= 0 then
+            local message = string.format("Core library v%s required (current: %s)", requiredVersion,
+                config.core.version or "none")
+            self.log.info(message)
+            return false, message
+        end
+    end
+
+    -- Get installed modules by scanning directory
+    local installedModules = self:getInstalledCoreModules()
 
     local missingModules = {}
 
@@ -956,12 +966,12 @@ end
 ---@param ... string: Additional versions to include in the comparisons
 ---@return string|nil: The minimum version (most recent semver) or nil if comparison cannot be performed
 function Installer:getMinimumCoreVersion(...)
-
-    local additional_versions = {...}
+    local additional_versions = { ... }
 
     local installedPrograms = self:getInstalledPrograms()
     if #installedPrograms < 1 and #additional_versions < 1 then
-        self.log.warn("Cannot get minimum core version when no programs are installed and there are no additional versions to test")
+        self.log.warn(
+            "Cannot get minimum core version when no programs are installed and there are no additional versions to test")
         return nil
     end
 
@@ -1010,8 +1020,21 @@ function Installer:installCore(version, modules)
     self.log.info("Installing bng-cc-core v%s from %s", version, coreBaseUrl)
 
     -- Track steps for progress bar
-    local totalSteps = #modules
+    local totalSteps
     local currentStep = 0
+
+    local modulesToInstall = {}
+
+    if modules and #modules > 0 then
+        totalSteps = #modules
+        modulesToInstall = modules
+    else
+        -- Re-download all existing modules
+        local existingModules = self:getInstalledCoreModules()
+        totalSteps = #existingModules or 0
+        modulesToInstall = existingModules
+        self.log.debug("Re-installing core modules: %s", dump(existingModules))
+    end
 
     -- Create/clean core directory
     local corePath = self.BASE_PATH .. "/common/bng-cc-core"
@@ -1021,7 +1044,7 @@ function Installer:installCore(version, modules)
     fs.makeDir(corePath)
 
     -- Download each required module
-    for _, moduleName in ipairs(modules) do
+    for _, moduleName in ipairs(modulesToInstall) do
         statusBox("Downloading core module: " .. moduleName)
 
         local moduleUrl = string.format("%s/%s.lua", coreBaseUrl, moduleName)
@@ -1031,6 +1054,7 @@ function Installer:installCore(version, modules)
                 progress(currentStep / totalSteps)
             end)
     end
+
 
     -- Update config with core details
     local config = self:loadConfig()
@@ -1122,7 +1146,7 @@ function Installer:showContinueDialogView(title, message, buttonText, color)
     return action
 end
 
-function Installer:showYesNoDialogView(title, message)
+function Installer:showYesNoDialogView(title, message, color)
     ui.clear()
 
     local currentY = self.boxSizing.mainPadding + 1
@@ -1132,12 +1156,12 @@ function Installer:showYesNoDialogView(title, message)
     currentY = currentY + 1
 
     ui.textBox(term.current(), self.boxSizing.mainPadding + 1, currentY, self.boxSizing.contentBox - 2, 3,
-        title or "Alert", colors.yellow)
+        title or "Alert", color or colors.yellow)
 
     currentY = currentY + 1
 
     ui.horizontalLine(term.current(), self.boxSizing.mainPadding + 1, currentY, self.boxSizing.contentBox - 2,
-        colors.yellow)
+        color or colors.yellow)
 
     currentY = currentY + 1
 
@@ -1458,6 +1482,7 @@ function Installer:run(config)
                         end
 
                         if action == "install" then
+                            self:installCore(selectedProgram.core.version, selectedProgram.core.modules)
                             self:installProgram(selectedProgram)
                             self:showComplete(selectedProgram.title)
                         end
@@ -1468,7 +1493,6 @@ function Installer:run(config)
                 self:showProgramManager()
                 -- MAIN MENU > UPDATE CORE
             elseif selection == self.MAIN_MENU.options.UPDATE_CORE then
-
                 -- get installed programs
                 -- TODO use cache
                 local installedPrograms = self:getInstalledPrograms()
@@ -1477,8 +1501,19 @@ function Installer:run(config)
                 else
                     local selectedVersion = self:showCoreVersionSelectorView()
                     if selectedVersion then
-                        -- Handle core installation
+                        -- Handle core installation (re-install all exising modules)
+                        self:installCore(selectedVersion)
                     end
+                end
+                -- MAIN MENU > REMOVE ALL
+            elseif selection == self.MAIN_MENU.options.REMOVE_ALL then
+                local result = self:showYesNoDialogView("Warning", "Are you sure you want to delete all files?")
+                if result == "yes" then
+                    fs.delete(self.CONFIG_PATH)
+                    fs.delete(self.BASE_PATH)
+
+                    self:closeLogger()
+                    self:initLogger()
                 end
             elseif selection == self.MAIN_MENU.options.EXIT then
                 run = false
