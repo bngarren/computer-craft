@@ -2,7 +2,7 @@ local ui = (function()
     -- PrimeUI by JackMacWindows
     -- Public domain/CC0
 
-    local expect = require"cc.expect".expect
+    local expect = require "cc.expect".expect
 
     -- Initialization code
     local PrimeUI = {}
@@ -183,7 +183,7 @@ local ui = (function()
                     win.setTextColor(fgColor)
                     win.write(" " .. text .. " ")
                 elseif (event == "monitor_touch" and periphName == button and clickX >= screenX and clickX < screenX +
-                    #text + 2 and clickY == screenY) or (event == "mouse_up" and button == 1 and buttonDown) then
+                        #text + 2 and clickY == screenY) or (event == "mouse_up" and button == 1 and buttonDown) then
                     -- Finish a click event.
                     if clickX >= screenX and clickX < screenX + #text + 2 and clickY == screenY then
                         -- Trigger the action.
@@ -595,6 +595,7 @@ local ui = (function()
         function box.getSize()
             return width, math.huge
         end
+
         -- Define a function to redraw with.
         local function redraw(_text)
             expect(1, _text, "string")
@@ -611,6 +612,7 @@ local ui = (function()
         redraw(text)
         return redraw
     end
+
     return PrimeUI
 end)()
 
@@ -651,7 +653,7 @@ local Installer = {
             EXIT = "EXIT"
         },
         -- Add an order array to maintain specific menu ordering
-        order = {"INSTALL_PROGRAM", "MANAGE_PROGRAMS", "UPDATE_CORE", "EXIT"},
+        order = { "INSTALL_PROGRAM", "MANAGE_PROGRAMS", "UPDATE_CORE", "EXIT" },
         display = {
             INSTALL_PROGRAM = {
                 text = "Install New Program",
@@ -773,10 +775,6 @@ function Installer:loadConfig()
             version = nil,
             installedAt = nil
         },
-        settings = {
-            autoUpdate = false,
-            checkUpdates = true
-        }
     }
 
     if fs.exists(self.CONFIG_PATH) then
@@ -800,8 +798,11 @@ function Installer:loadConfig()
                 end
             end
         end
-        return config
+    else
+        self.log.warn("No .bng-config file exists yet...Initializing default at %s", self.CONFIG_PATH)
+        self:saveConfig(config)
     end
+    return config
 end
 
 function Installer:saveConfig(config)
@@ -811,14 +812,12 @@ function Installer:saveConfig(config)
 end
 
 function Installer:getInstalledPrograms()
-
     local bngConfig = self:loadConfig()
     local installedPrograms = {}
     for k, v in pairs(bngConfig.installedPrograms) do
         table.insert(installedPrograms, k)
     end
     return installedPrograms
-
 end
 
 --- Gets the registry.json file from the programs repo. This file lists the available programs and their version info, dependencies, etc.
@@ -877,9 +876,9 @@ function Installer:checkCoreRequirements(program)
     end
 
     -- Version check
-    if not config.core.version or self:compareVersions(config.core.version, requiredVersion) ~= 0 then
+    if not config.core.version or self.compareVersions(config.core.version, requiredVersion) ~= 0 then
         local message = string.format("Core library v%s required (current: %s)", requiredVersion,
-                                      config.core.version or "none")
+            config.core.version or "none")
         self.log.info(message)
         return false, message
     end
@@ -926,14 +925,14 @@ function Installer:checkCoreRequirements(program)
     return true
 end
 
-function Installer:compareVersions(v1, v2)
+function Installer.compareVersions(v1, v2)
     if v1 == "dev" or v2 == "dev" then
         return 0
     end
 
     local function parseVersion(v)
         local major, minor, patch = v:match("(%d+)%.(%d+)%.(%d+)")
-        return {tonumber(major) or 0, tonumber(minor) or 0, tonumber(patch) or 0}
+        return { tonumber(major) or 0, tonumber(minor) or 0, tonumber(patch) or 0 }
     end
 
     local parts1, parts2 = parseVersion(v1), parseVersion(v2)
@@ -953,12 +952,57 @@ function Installer:constructCoreUrl(version)
     end
 end
 
+--- When updating/installing bng-cc-core, we need to know the minimum required version of the core library to satisfy the programs currently installed on the machine, including any program about to be installed (which is why we allow passing additional_versions parameters)
+---@param ... string: Additional versions to include in the comparisons
+---@return string|nil: The minimum version (most recent semver) or nil if comparison cannot be performed
+function Installer:getMinimumCoreVersion(...)
+
+    local additional_versions = {...}
+
+    local installedPrograms = self:getInstalledPrograms()
+    if #installedPrograms < 1 and #additional_versions < 1 then
+        self.log.warn("Cannot get minimum core version when no programs are installed and there are no additional versions to test")
+        return nil
+    end
+
+    local registry = self:fetchRegistry()
+    if not registry or #registry.programs == 0 then
+        return nil
+    end
+
+    local minCoreVersion
+    for _, programName in ipairs(installedPrograms) do
+        for _, registryProgram in ipairs(registry.programs) do
+            if registryProgram.name == programName then
+                local version = registryProgram.core.version
+                self.log.debug("%s requires bng-cc-core v%s", programName, version)
+
+                if not minCoreVersion or self.compareVersions(version, minCoreVersion) >= 0 then
+                    minCoreVersion = version
+                    self.log.debug("Minimum core version updated to v%s", minCoreVersion)
+                end
+                break
+            end
+        end
+    end
+
+    -- test the additional_versions
+    for _, add_version in ipairs(additional_versions) do
+        if not minCoreVersion or self.compareVersions(add_version, minCoreVersion) then
+            minCoreVersion = add_version
+            self.log.debug("Minimum core version updated to v%s (due to additional tested version)", minCoreVersion)
+        end
+    end
+
+    return minCoreVersion
+end
+
 function Installer:installCore(version, modules)
     local currentTerm = term.current()
     local progress = ui.progressBar(currentTerm, self.boxSizing.mainPadding, 8, self.boxSizing.contentBox, nil, nil,
-                                    true)
+        true)
     local statusBox = ui.textBox(currentTerm, self.boxSizing.mainPadding, 6, self.boxSizing.contentBox, 1,
-                                 "Installing core...")
+        "Installing core...")
 
     -- Construct correct URL based on version
     local coreBaseUrl = self:constructCoreUrl(version)
@@ -982,10 +1026,10 @@ function Installer:installCore(version, modules)
 
         local moduleUrl = string.format("%s/%s.lua", coreBaseUrl, moduleName)
         self:downloadFile(moduleUrl, string.format("%s/common/bng-cc-core/%s.lua", self.BASE_PATH, moduleName),
-                          function()
-            currentStep = currentStep + 1
-            progress(currentStep / totalSteps)
-        end)
+            function()
+                currentStep = currentStep + 1
+                progress(currentStep / totalSteps)
+            end)
     end
 
     -- Update config with core details
@@ -1006,7 +1050,7 @@ end
 function Installer:installProgram(program)
     local currentTerm = term.current()
     local progress = ui.progressBar(currentTerm, self.boxSizing.mainPadding, 8, self.boxSizing.contentBox, nil, nil,
-                                    true)
+        true)
     local statusBox = ui.textBox(currentTerm, self.boxSizing.mainPadding, 6, self.boxSizing.contentBox, 1, "")
 
     -- Create program directory
@@ -1049,6 +1093,35 @@ function Installer:installProgram(program)
     self:saveConfig(config)
 end
 
+function Installer:showContinueDialogView(title, message, buttonText, color)
+    ui.clear()
+
+    local currentY = self.boxSizing.mainPadding + 1
+
+    ui.borderBox(term.current(), self.boxSizing.mainPadding + 1, currentY, self.boxSizing.borderBox, 10)
+
+    currentY = currentY + 1
+
+    ui.textBox(term.current(), self.boxSizing.mainPadding + 1, currentY, self.boxSizing.contentBox - 2, 3,
+        title or "Info", color or colors.lightBlue)
+
+    currentY = currentY + 1
+
+    ui.horizontalLine(term.current(), self.boxSizing.mainPadding + 1, currentY, self.boxSizing.contentBox - 2,
+        color or colors.lightBlue)
+
+    currentY = currentY + 1
+
+    ui.textBox(term.current(), self.boxSizing.mainPadding + 1, currentY, self.boxSizing.contentBox - 2, 4, message or "")
+
+    currentY = currentY + 5
+
+    ui.button(term.current(), self.boxSizing.mainPadding + 4, currentY, buttonText or "Continue", "continue")
+
+    local _, action = ui.run()
+    return action
+end
+
 function Installer:showYesNoDialogView(title, message)
     ui.clear()
 
@@ -1059,12 +1132,12 @@ function Installer:showYesNoDialogView(title, message)
     currentY = currentY + 1
 
     ui.textBox(term.current(), self.boxSizing.mainPadding + 1, currentY, self.boxSizing.contentBox - 2, 3,
-               title or "Alert", colors.yellow)
+        title or "Alert", colors.yellow)
 
     currentY = currentY + 1
 
     ui.horizontalLine(term.current(), self.boxSizing.mainPadding + 1, currentY, self.boxSizing.contentBox - 2,
-                      colors.yellow)
+        colors.yellow)
 
     currentY = currentY + 1
 
@@ -1083,7 +1156,7 @@ function Installer:showMainMenuView()
     ui.clear()
 
     ui.textBox(term.current(), self.boxSizing.mainPadding, 2, self.boxSizing.contentBox, 3,
-               "BNG Installer v" .. self.VERSION, colors.cyan)
+        "BNG Installer v" .. self.VERSION, colors.cyan)
 
     ui.textBox(term.current(), self.boxSizing.mainPadding, 4, self.boxSizing.contentBox, 3, "Select an option:")
 
@@ -1101,12 +1174,12 @@ function Installer:showMainMenuView()
     ui.borderBox(term.current(), self.boxSizing.mainPadding + 1, 6, self.boxSizing.borderBox, 8)
 
     local descriptionBox = ui.textBox(term.current(), self.boxSizing.mainPadding, 15, self.boxSizing.contentBox, 3,
-                                      descriptions[1])
+        descriptions[1])
 
     ui.selectionBox(term.current(), self.boxSizing.mainPadding + 1, 6, self.boxSizing.contentBox, 8, display_text,
-                    "done", function(opt)
-        descriptionBox(descriptions[opt])
-    end)
+        "done", function(opt)
+            descriptionBox(descriptions[opt])
+        end)
 
     local action_type, _, selected_text = ui.run()
 
@@ -1120,7 +1193,7 @@ function Installer:showProgramSelectorView(programs)
     ui.clear()
 
     ui.textBox(term.current(), self.boxSizing.mainPadding, 2, self.boxSizing.contentBox, 3,
-               "Select a program to install:")
+        "Select a program to install:")
 
     -- Create arrays for selection box
     local entries = {}
@@ -1140,12 +1213,12 @@ function Installer:showProgramSelectorView(programs)
     ui.borderBox(term.current(), self.boxSizing.mainPadding + 1, 6, self.boxSizing.borderBox, 8)
 
     local descriptionBox = ui.textBox(term.current(), self.boxSizing.mainPadding, 15, self.boxSizing.contentBox, 5,
-                                      descriptions[1])
+        descriptions[1])
 
     ui.selectionBox(term.current(), self.boxSizing.mainPadding + 1, 6, self.boxSizing.contentBox, 8, entries, "done",
-                    function(opt)
-        descriptionBox(descriptions[opt])
-    end)
+        function(opt)
+            descriptionBox(descriptions[opt])
+        end)
 
     local _, _, selection = ui.run()
 
@@ -1161,40 +1234,101 @@ function Installer:showProgramSelectorView(programs)
     end
 end
 
-function Installer:showCoreVersionSelectorView(requiredVersion)
-    self.log.debug("Showing core version selector. Required version: %s", requiredVersion)
+function Installer:showCoreVersionSelectorView(_requiredVersion)
+    self.log.debug("Showing core version selector")
     ui.clear()
 
+    -- Fetch latest releases
+    local coreReleases = {}
+    local response = self:httpGet("https://api.github.com/repos/bngarren/bng-cc-core/releases")
+    if response then
+        local apiResult = textutils.unserializeJSON(response.readAll())
+        if apiResult then
+            for index, value in ipairs(apiResult) do
+                if index > 3 then break end
+                table.insert(coreReleases, { tag = value.tag_name, url = value.html_url })
+            end
+            self.log.info("Retrieved latest releases:\n%s", dump(coreReleases))
+        end
+    end
+
     local currentVersion = self:loadConfig().core.version or "none"
+    local requiredVersion = self:getMinimumCoreVersion(_requiredVersion)
+    local options = {}
+    local descriptions = {}
+
+    -- Add latest 3 releases
+    for i, release in ipairs(coreReleases) do
+        local isRequired = requiredVersion and release.tag:sub(2) == requiredVersion
+        local option = release.tag .. (isRequired and " (required)" or "")
+        table.insert(options, option)
+        table.insert(descriptions, string.format(
+            "Install core %s%s.\nThis version will be downloaded from the corresponding GitHub release.",
+            release.tag,
+            isRequired and " - *required by local program(s)" or ""
+        ))
+    end
+
+    -- Add required version if not in latest 3 and exists
+    if requiredVersion then
+        local requiredFound = false
+        for _, opt in ipairs(options) do
+            if opt:match("^v" .. requiredVersion) then
+                requiredFound = true
+                break
+            end
+        end
+
+        if not requiredFound then
+            table.insert(options, "v" .. requiredVersion .. " (required)")
+            table.insert(descriptions, string.format(
+                "Install core v%s - this is the version required by local program(s).\nThis version will be downloaded from the corresponding GitHub release.",
+                requiredVersion
+            ))
+        end
+    end
+
+    -- Add dev branch option
+    table.insert(options, "Development Branch (latest)")
+    table.insert(descriptions,
+        "Install the latest code from the dev branch.\nWarning: This version may be unstable but will have the latest features and fixes.")
 
     ui.textBox(term.current(), self.boxSizing.mainPadding, 2, self.boxSizing.contentBox, 3,
-               string.format("Select bng-cc-core Version\nCurrent: %s", currentVersion))
-
-    local options = {string.format("v%s (required)", requiredVersion), "Development Branch (latest)"}
-
-    local descriptions = {string.format(
-        "Install core v%s - this is the version required by local program(s).\nThis version will be downloaded from the corresponding GitHub release.",
-        requiredVersion),
-                          "Install the latest code from the dev branch.\nWarning: This version may be unstable but will have the latest features and fixes."}
+        string.format("Select bng-cc-core Version\nCurrent: %s\nRequired: %s", currentVersion, requiredVersion))
 
     ui.borderBox(term.current(), self.boxSizing.mainPadding + 1, 6, self.boxSizing.borderBox, 8)
-
-    local descriptionBox =
-        ui.textBox(term.current(), self.boxSizing.mainPadding, 15, self.boxSizing.contentBox, 5, -- Increased height to accommodate longer descriptions
-                   descriptions[1])
+    local descriptionBox = ui.textBox(term.current(), self.boxSizing.mainPadding, 15, self.boxSizing.contentBox, 5,
+        descriptions[1])
 
     ui.selectionBox(term.current(), self.boxSizing.mainPadding + 1, 6, self.boxSizing.contentBox, 8, options, "done",
-                    function(opt)
-        descriptionBox(descriptions[opt])
-    end)
+        function(opt)
+            descriptionBox(descriptions[opt])
+        end)
 
     local _, _, selection = ui.run()
 
     local selectedVersion
-    if selection == options[1] then
-        selectedVersion = requiredVersion
-    else
+    if selection:match("Development Branch") then
         selectedVersion = "dev"
+    else
+        selectedVersion = selection:match("^v(.+)%s?"):gsub("%s.*$", "")
+    end
+
+    -- Handle version installation confirmation
+    if selectedVersion == currentVersion then
+        local action = self:showYesNoDialogView("Alert", string.format(
+            "bng-cc-core (%s) is already installed.\nReinstall?",
+            selectedVersion))
+        if not action then
+            return nil
+        end
+    else
+        local action = self:showYesNoDialogView("Confirm", string.format(
+            "This will install bng-cc-core (%s).\nContinue?",
+            selectedVersion))
+        if not action then
+            return nil
+        end
     end
 
     self.log.info("Selected core version: %s", selectedVersion)
@@ -1205,7 +1339,7 @@ function Installer:showComplete(name)
     ui.clear()
 
     ui.textBox(term.current(), self.boxSizing.mainPadding, 2, self.boxSizing.contentBox, 3,
-               name .. " has been installed successfully!")
+        name .. " has been installed successfully!")
 
     ui.button(term.current(), self.boxSizing.mainPadding, 6, "Continue", "done")
 
@@ -1219,7 +1353,7 @@ function Installer:showProgramManager()
 
     if not next(config.installedPrograms) then
         ui.textBox(term.current(), self.boxSizing.mainPadding, 2, self.boxSizing.contentBox, 3,
-                   "No programs are currently installed.")
+            "No programs are currently installed.")
 
         ui.button(term.current(), self.boxSizing.mainPadding, 6, "Back", "done")
 
@@ -1236,18 +1370,18 @@ function Installer:showProgramManager()
     for name, info in pairs(config.installedPrograms) do
         table.insert(entries, name)
         table.insert(descriptions, string.format("Version: %s\nInstalled: %s", info.version,
-                                                 os.date("%Y-%m-%d %H:%M", info.installedAt / 1000)))
+            os.date("%Y-%m-%d %H:%M", info.installedAt / 1000)))
     end
 
     ui.borderBox(term.current(), self.boxSizing.mainPadding + 1, 6, self.boxSizing.borderBox, 8)
 
     local descriptionBox = ui.textBox(term.current(), self.boxSizing.mainPadding, 15, self.boxSizing.contentBox, 3,
-                                      descriptions[1])
+        descriptions[1])
 
     ui.selectionBox(term.current(), self.boxSizing.mainPadding + 1, 6, self.boxSizing.contentBox, 8, entries, "done",
-                    function(opt)
-        descriptionBox(descriptions[opt])
-    end)
+        function(opt)
+            descriptionBox(descriptions[opt])
+        end)
 
     ui.button(term.current(), self.boxSizing.mainPadding, self.boxSizing.contentBox - 4, "Remove", "remove")
 
@@ -1272,8 +1406,8 @@ function Installer:confirmInstall(program)
     local coreOk, coreMessage = self:checkCoreRequirements(program)
 
     local message = string.format("Program: %s v%s\nAuthor: %s\n\nCore Status: %s\n\nProceed with installation?",
-                                  program.title, program.version, program.author,
-                                  coreOk and "Ready" or "Needs core v" .. program.core.version)
+        program.title, program.version, program.author,
+        coreOk and "Ready" or "Needs core v" .. program.core.version)
 
     ui.textBox(term.current(), self.boxSizing.mainPadding, 2, self.boxSizing.contentBox, 8, message)
 
@@ -1307,6 +1441,7 @@ function Installer:run(config)
         while run do
             local _, _, selection = self:showMainMenuView()
 
+            -- MAIN MENU > INSTALL PROGRAM
             if selection == self.MAIN_MENU.options.INSTALL_PROGRAM then
                 local registry = self:fetchRegistry()
                 if registry then
@@ -1328,73 +1463,23 @@ function Installer:run(config)
                         end
                     end
                 end
+                -- MAIN MENU > MANAGE PROGRAMS
             elseif selection == self.MAIN_MENU.options.MANAGE_PROGRAMS then
                 self:showProgramManager()
+                -- MAIN MENU > UPDATE CORE
             elseif selection == self.MAIN_MENU.options.UPDATE_CORE then
 
+                -- get installed programs
+                -- TODO use cache
                 local installedPrograms = self:getInstalledPrograms()
-
                 if #installedPrograms < 1 then
-                    -- Should offer a "Latest Release" version
-                    -- Need to hit the github API to get release/tag list
-                    break
+                    self:showContinueDialogView(nil, "At least 1 program must be installed to update the core library.")
+                else
+                    local selectedVersion = self:showCoreVersionSelectorView()
+                    if selectedVersion then
+                        -- Handle core installation
+                    end
                 end
-
-                -- If we have installed programs already, we offer the minimum required core version or a dev branch
-                local registry = self:fetchRegistry()
-                if registry and #registry.programs > 0 then
-                    -- find out the minimum bng-cc-core version required
-                    local minCoreVersion
-                    for _, programName in ipairs(installedPrograms) do
-                        -- find the required core version for this program in the registry
-                        local version
-                        for _, registryProgram in ipairs(registry.programs) do
-                            if registryProgram.name == programName then
-                                version = registryProgram.core.version
-                                self.log.debug("%s requires bng-cc-core v%s", programName, version)
-                                break
-                            end
-
-                        end
-
-                        if version then
-                            if not minCoreVersion then
-                                minCoreVersion = version
-                                self.log.debug("Previously unset minimum core version is now v%s", minCoreVersion)
-                            else
-                                if self.compareVersions(version, minCoreVersion) >= 0 then
-                                    minCoreVersion = version
-                                    self.log.debug("v%s is newer than v%s, minimum core version updated", version,
-                                                   minCoreVersion)
-                                end
-                            end
-                        end
-                    end
-                    if not minCoreVersion then
-                        self.log.error("Could not find a non-nil minimum bng-cc-core program for installed programs.")
-                        break
-                    end
-                    self.log.debug("Installed program(s) required a minimum bng-cc-core of v%s", minCoreVersion)
-
-                    local selectedVersion = self:showCoreVersionSelectorView(minCoreVersion)
-
-                    -- get current core version
-                    local currentCoreVersion = self:loadConfig().core.version
-
-                    if selectedVersion == currentCoreVersion then
-                        local action = self:showYesNoDialogView("Alert", string.format(
-                                                                    "bng-cc-core (%s) is already installed.\nReinstall?",
-                                                                    selectedVersion))
-                        -- handle response
-                    else
-                        local action = self:showYesNoDialogView("Confirm", string.format(
-                                                                    "This will install bng-cc-core (%s).\nContinue?",
-                                                                    selectedVersion))
-                        -- handle response
-                    end
-
-                end
-
             elseif selection == self.MAIN_MENU.options.EXIT then
                 run = false
                 break
@@ -1412,7 +1497,7 @@ function Installer:run(config)
     self:closeLogger()
 end
 
-local args = {...}
+local args = { ... }
 
 local installConfig = {}
 
