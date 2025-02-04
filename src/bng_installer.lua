@@ -1,351 +1,626 @@
 local ui = (function()
     -- PrimeUI by JackMacWindows
     -- Public domain/CC0
-    -- Packaged from https://github.com/MCJack123/PrimeUI
 
-    local a = require "cc.expect".expect;
-    local b = {}
+    local expect = require"cc.expect".expect
+
+    -- Initialization code
+    local PrimeUI = {}
     do
-        local c = {}
-        local d;
-        function b.addTask(e)
-            a(1, e, "function")
-            local f = {
-                coro = coroutine.create(e)
+        local coros = {}
+        local restoreCursor
+
+        --- Adds a task to run in the main loop.
+        ---@param func function The function to run, usually an `os.pullEvent` loop
+        function PrimeUI.addTask(func)
+            expect(1, func, "function")
+            local t = {
+                coro = coroutine.create(func)
             }
-            c[#c + 1] = f;
-            _, f.filter = coroutine.resume(f.coro)
+            coros[#coros + 1] = t
+            _, t.filter = coroutine.resume(t.coro)
         end
 
-        function b.resolve(...)
-            coroutine.yield(c, ...)
+        --- Sends the provided arguments to the run loop, where they will be returned.
+        ---@param ... any The parameters to send
+        function PrimeUI.resolve(...)
+            coroutine.yield(coros, ...)
         end
 
-        function b.clear()
+        --- Clears the screen and resets all components. Do not use any previously
+        --- created components after calling this function.
+        function PrimeUI.clear()
+            -- Reset the screen.
             term.setCursorPos(1, 1)
             term.setCursorBlink(false)
             term.setBackgroundColor(colors.black)
             term.setTextColor(colors.white)
             term.clear()
-            c = {}
-            d = nil
+            -- Reset the task list and cursor restore function.
+            coros = {}
+            restoreCursor = nil
         end
 
-        function b.setCursorWindow(g)
-            a(1, g, "table", "nil")
-            d = g and g.restoreCursor
+        --- Sets or clears the window that holds where the cursor should be.
+        ---@param win window|nil The window to set as the active window
+        function PrimeUI.setCursorWindow(win)
+            expect(1, win, "table", "nil")
+            restoreCursor = win and win.restoreCursor
         end
 
-        function b.getWindowPos(g, h, i)
-            if g == term then
-                return h, i
+        --- Gets the absolute position of a coordinate relative to a window.
+        ---@param win window The window to check
+        ---@param x number The relative X position of the point
+        ---@param y number The relative Y position of the point
+        ---@return number x The absolute X position of the window
+        ---@return number y The absolute Y position of the window
+        function PrimeUI.getWindowPos(win, x, y)
+            if win == term then
+                return x, y
             end
-            while g ~= term.native() and g ~= term.current() do
-                if not g.getPosition then
-                    return h, i
+            while win ~= term.native() and win ~= term.current() do
+                if not win.getPosition then
+                    return x, y
                 end
-                local j, k = g.getPosition()
-                h, i = h + j - 1, i + k - 1;
-                _, g = debug.getupvalue(select(2, debug.getupvalue(g.isColor, 1)), 1)
+                local wx, wy = win.getPosition()
+                x, y = x + wx - 1, y + wy - 1
+                _, win = debug.getupvalue(select(2, debug.getupvalue(win.isColor, 1)), 1) -- gets the parent window through an upvalue
             end
-            return h, i
+            return x, y
         end
 
-        function b.run()
+        --- Runs the main loop, returning information on an action.
+        ---@return any ... The result of the coroutine that exited
+        function PrimeUI.run()
             while true do
-                if d then
-                    d()
+                -- Restore the cursor and wait for the next event.
+                if restoreCursor then
+                    restoreCursor()
                 end
-                local l = table.pack(os.pullEvent())
-                for _, m in ipairs(c) do
-                    if m.filter == nil or m.filter == l[1] then
-                        local n = table.pack(coroutine.resume(m.coro, table.unpack(l, 1, l.n)))
-                        if not n[1] then
-                            error(n[2], 2)
+                local ev = table.pack(os.pullEvent())
+                -- Run all coroutines.
+                for _, v in ipairs(coros) do
+                    if v.filter == nil or v.filter == ev[1] then
+                        -- Resume the coroutine, passing the current event.
+                        local res = table.pack(coroutine.resume(v.coro, table.unpack(ev, 1, ev.n)))
+                        -- If the call failed, bail out. Coroutines should never exit.
+                        if not res[1] then
+                            error(res[2], 2)
                         end
-                        if n[2] == c then
-                            return table.unpack(n, 3, n.n)
+                        -- If the coroutine resolved, return its values.
+                        if res[2] == coros then
+                            return table.unpack(res, 3, res.n)
                         end
-                        m.filter = n[2]
+                        -- Set the next event filter.
+                        v.filter = res[2]
                     end
                 end
             end
         end
     end
-    function b.borderBox(g, h, i, o, p, q, r)
-        a(1, g, "table")
-        a(2, h, "number")
-        a(3, i, "number")
-        a(4, o, "number")
-        a(5, p, "number")
-        q = a(6, q, "number", "nil") or colors.white;
-        r = a(7, r, "number", "nil") or colors.black;
-        g.setBackgroundColor(r)
-        g.setTextColor(q)
-        g.setCursorPos(h - 1, i - 1)
-        g.write("\x9C" .. ("\x8C"):rep(o))
-        g.setBackgroundColor(q)
-        g.setTextColor(r)
-        g.write("\x93")
-        for s = 1, p do
-            g.setCursorPos(g.getCursorPos() - 1, i + s - 1)
-            g.write("\x95")
+
+    --- Draws a thin border around a screen region.
+    ---@param win window The window to draw on
+    ---@param x number The X coordinate of the inside of the box
+    ---@param y number The Y coordinate of the inside of the box
+    ---@param width number The width of the inner box
+    ---@param height number The height of the inner box
+    ---@param fgColor color|nil The color of the border (defaults to white)
+    ---@param bgColor color|nil The color of the background (defaults to black)
+    function PrimeUI.borderBox(win, x, y, width, height, fgColor, bgColor)
+        expect(1, win, "table")
+        expect(2, x, "number")
+        expect(3, y, "number")
+        expect(4, width, "number")
+        expect(5, height, "number")
+        fgColor = expect(6, fgColor, "number", "nil") or colors.white
+        bgColor = expect(7, bgColor, "number", "nil") or colors.black
+        -- Draw the top-left corner & top border.
+        win.setBackgroundColor(bgColor)
+        win.setTextColor(fgColor)
+        win.setCursorPos(x - 1, y - 1)
+        win.write("\x9C" .. ("\x8C"):rep(width))
+        -- Draw the top-right corner.
+        win.setBackgroundColor(fgColor)
+        win.setTextColor(bgColor)
+        win.write("\x93")
+        -- Draw the right border.
+        for i = 1, height do
+            win.setCursorPos(win.getCursorPos() - 1, y + i - 1)
+            win.write("\x95")
         end
-        g.setBackgroundColor(r)
-        g.setTextColor(q)
-        for s = 1, p do
-            g.setCursorPos(h - 1, i + s - 1)
-            g.write("\x95")
+        -- Draw the left border.
+        win.setBackgroundColor(bgColor)
+        win.setTextColor(fgColor)
+        for i = 1, height do
+            win.setCursorPos(x - 1, y + i - 1)
+            win.write("\x95")
         end
-        g.setCursorPos(h - 1, i + p)
-        g.write("\x8D" .. ("\x8C"):rep(o) .. "\x8E")
+        -- Draw the bottom border and corners.
+        win.setCursorPos(x - 1, y + height)
+        win.write("\x8D" .. ("\x8C"):rep(width) .. "\x8E")
     end
 
-    function b.button(g, h, i, t, u, q, r, v)
-        a(1, g, "table")
-        a(2, h, "number")
-        a(3, i, "number")
-        a(4, t, "string")
-        a(5, u, "function", "string")
-        q = a(6, q, "number", "nil") or colors.white;
-        r = a(7, r, "number", "nil") or colors.gray;
-        v = a(8, v, "number", "nil") or colors.lightGray;
-        g.setCursorPos(h, i)
-        g.setBackgroundColor(r)
-        g.setTextColor(q)
-        g.write(" " .. t .. " ")
-        b.addTask(function()
-            local w = false;
+    --- Creates a clickable button on screen with text.
+    ---@param win window The window to draw on
+    ---@param x number The X position of the button
+    ---@param y number The Y position of the button
+    ---@param text string The text to draw on the button
+    ---@param action function|string A function to call when clicked, or a string to send with a `run` event
+    ---@param fgColor color|nil The color of the button text (defaults to white)
+    ---@param bgColor color|nil The color of the button (defaults to light gray)
+    ---@param clickedColor color|nil The color of the button when clicked (defaults to gray)
+    ---@param periphName string|nil The name of the monitor peripheral, or nil (set if you're using a monitor - events will be filtered to that monitor)
+    function PrimeUI.button(win, x, y, text, action, fgColor, bgColor, clickedColor, periphName)
+        expect(1, win, "table")
+        expect(1, win, "table")
+        expect(2, x, "number")
+        expect(3, y, "number")
+        expect(4, text, "string")
+        expect(5, action, "function", "string")
+        fgColor = expect(6, fgColor, "number", "nil") or colors.white
+        bgColor = expect(7, bgColor, "number", "nil") or colors.gray
+        clickedColor = expect(8, clickedColor, "number", "nil") or colors.lightGray
+        periphName = expect(9, periphName, "string", "nil")
+        -- Draw the initial button.
+        win.setCursorPos(x, y)
+        win.setBackgroundColor(bgColor)
+        win.setTextColor(fgColor)
+        win.write(" " .. text .. " ")
+        -- Get the screen position and add a click handler.
+        PrimeUI.addTask(function()
+            local screenX, screenY = PrimeUI.getWindowPos(win, x, y)
+            local buttonDown = false
             while true do
-                local x, y, z, A = os.pullEvent()
-                local B, C = b.getWindowPos(g, h, i)
-                if x == "mouse_click" and y == 1 and z >= B and z < B + #t + 2 and A == C then
-                    w = true;
-                    g.setCursorPos(h, i)
-                    g.setBackgroundColor(v)
-                    g.setTextColor(q)
-                    g.write(" " .. t .. " ")
-                elseif x == "mouse_up" and y == 1 and w then
-                    if z >= B and z < B + #t + 2 and A == C then
-                        if type(u) == "string" then
-                            b.resolve("button", u)
+                local event, button, clickX, clickY = os.pullEvent()
+                if event == "mouse_click" and periphName == nil and button == 1 and clickX >= screenX and clickX <
+                    screenX + #text + 2 and clickY == screenY then
+                    -- Initiate a click action (but don't trigger until mouse up).
+                    buttonDown = true
+                    -- Redraw the button with the clicked background color.
+                    win.setCursorPos(x, y)
+                    win.setBackgroundColor(clickedColor)
+                    win.setTextColor(fgColor)
+                    win.write(" " .. text .. " ")
+                elseif (event == "monitor_touch" and periphName == button and clickX >= screenX and clickX < screenX +
+                    #text + 2 and clickY == screenY) or (event == "mouse_up" and button == 1 and buttonDown) then
+                    -- Finish a click event.
+                    if clickX >= screenX and clickX < screenX + #text + 2 and clickY == screenY then
+                        -- Trigger the action.
+                        if type(action) == "string" then
+                            PrimeUI.resolve("button", action)
                         else
-                            u()
+                            action()
                         end
                     end
-                    g.setCursorPos(h, i)
-                    g.setBackgroundColor(r)
-                    g.setTextColor(q)
-                    g.write(" " .. t .. " ")
+                    -- Redraw the original button state.
+                    win.setCursorPos(x, y)
+                    win.setBackgroundColor(bgColor)
+                    win.setTextColor(fgColor)
+                    win.write(" " .. text .. " ")
                 end
             end
         end)
     end
 
-    -- function b.centerLabel(g,h,i,o,t,q,r)a(1,g,"table")a(2,h,"number")a(3,i,"number")a(4,o,"number")a(5,t,"string")q=a(6,q,"number","nil")or colors.white;r=a(7,r,"number","nil")or colors.black;assert(#t<=o,"string is too long")g.setCursorPos(h+math.floor((o-#t)/2),i)g.setTextColor(q)g.setBackgroundColor(r)g.write(t)end;
-    -- function b.checkSelectionBox(g,h,i,o,p,D,u,q,r)a(1,g,"table")a(2,h,"number")a(3,i,"number")a(4,o,"number")a(5,p,"number")a(6,D,"table")a(7,u,"function","string","nil")q=a(8,q,"number","nil")or colors.white;r=a(9,r,"number","nil")or colors.black;local E=0;for _ in pairs(D)do E=E+1 end;local F=window.create(g,h,i,o,p)F.setBackgroundColor(r)F.clear()local G=window.create(F,1,1,o-1,E)G.setBackgroundColor(r)G.setTextColor(q)G.clear()local H={}local I,J=1,1;for K,m in pairs(D)do G.setCursorPos(1,I)G.write((m and(m=="R"and"[-] "or"[\xD7] ")or"[ ] ")..K)H[I]={K,not not m}I=I+1 end;if E>p then F.setCursorPos(o,p)F.setBackgroundColor(r)F.setTextColor(q)F.write("\31")end;G.setCursorPos(2,J)G.setCursorBlink(true)b.setCursorWindow(G)local B,C=b.getWindowPos(g,h,i)b.addTask(function()local L=1;while true do local l=table.pack(os.pullEvent())local M;if l[1]=="key"then if l[2]==keys.up then M=-1 elseif l[2]==keys.down then M=1 elseif l[2]==keys.space and D[H[J][1]]~="R"then H[J][2]=not H[J][2]G.setCursorPos(2,J)G.write(H[J][2]and"\xD7"or" ")if type(u)=="string"then b.resolve("checkSelectionBox",u,H[J][1],H[J][2])elseif u then u(H[J][1],H[J][2])else D[H[J][1]]=H[J][2]end;for s,m in ipairs(H)do local N=D[m[1]]=="R"and"R"or m[2]G.setCursorPos(2,s)G.write(N and(N=="R"and"-"or"\xD7")or" ")end;G.setCursorPos(2,J)end elseif l[1]=="mouse_scroll"and l[3]>=B and l[3]<B+o and l[4]>=C and l[4]<C+p then M=l[2]end;if M and(J+M>=1 and J+M<=E)then J=J+M;if J-L<0 or J-L>=p then L=L+M;G.reposition(1,2-L)end;G.setCursorPos(2,J)end;F.setCursorPos(o,1)F.write(L>1 and"\30"or" ")F.setCursorPos(o,p)F.write(L<E-p+1 and"\31"or" ")G.restoreCursor()end end)end;
-    -- function b.drawImage(g,h,i,O,P,Q)a(1,g,"table")a(2,h,"number")a(3,i,"number")a(4,O,"string","table")P=a(5,P,"number","nil")or 1;a(6,Q,"boolean","nil")if Q==nil then Q=true end;if type(O)=="string"then local R=assert(fs.open(O,"rb"))local S=R.readAll()R.close()O=assert(textutils.unserialize(S),"File is not a valid BIMG file")end;for T=1,#O[P]do g.setCursorPos(h,i+T-1)g.blit(table.unpack(O[P][T]))end;local U=O[P].palette or O.palette;if Q and U then for s=0,#U do g.setPaletteColor(2^s,table.unpack(U[s]))end end end;
-    -- function b.drawText(g,t,V,q,r)a(1,g,"table")a(2,t,"string")a(3,V,"boolean","nil")q=a(4,q,"number","nil")or colors.white;r=a(5,r,"number","nil")or colors.black;g.setBackgroundColor(r)g.setTextColor(q)local W=term.redirect(g)local H=print(t)term.redirect(W)if V then local h,i=g.getPosition()local X=g.getSize()g.reposition(h,i,X,H)end;return H end;
-    -- function b.horizontalLine(g,h,i,o,q,r)a(1,g,"table")a(2,h,"number")a(3,i,"number")a(4,o,"number")q=a(5,q,"number","nil")or colors.white;r=a(6,r,"number","nil")or colors.black;g.setCursorPos(h,i)g.setTextColor(q)g.setBackgroundColor(r)g.write(("\x8C"):rep(o))end;
-    -- function b.inputBox(g,h,i,o,u,q,r,Y,Z,a0,a1)a(1,g,"table")a(2,h,"number")a(3,i,"number")a(4,o,"number")a(5,u,"function","string")q=a(6,q,"number","nil")or colors.white;r=a(7,r,"number","nil")or colors.black;a(8,Y,"string","nil")a(9,Z,"table","nil")a(10,a0,"function","nil")a(11,a1,"string","nil")local a2=window.create(g,h,i,o,1)a2.setTextColor(q)a2.setBackgroundColor(r)a2.clear()b.addTask(function()local a3=coroutine.create(read)local W=term.redirect(a2)local a4,n=coroutine.resume(a3,Y,Z,a0,a1)term.redirect(W)while coroutine.status(a3)~="dead"do local l=table.pack(os.pullEvent())W=term.redirect(a2)a4,n=coroutine.resume(a3,table.unpack(l,1,l.n))term.redirect(W)if not a4 then error(n)end end;if type(u)=="string"then b.resolve("inputBox",u,n)else u(n)end;while true do os.pullEvent()end end)end;
-    function b.interval(a5, u)
-        a(1, a5, "number")
-        a(2, u, "function", "string")
-        local a6 = os.startTimer(a5)
-        b.addTask(function()
+    --- Draws a line of text, centering it inside a box horizontally.
+    ---@param win window The window to draw on
+    ---@param x number The X position of the left side of the box
+    ---@param y number The Y position of the box
+    ---@param width number The width of the box to draw in
+    ---@param text string The text to draw
+    ---@param fgColor color|nil The color of the text (defaults to white)
+    ---@param bgColor color|nil The color of the background (defaults to black)
+    function PrimeUI.centerLabel(win, x, y, width, text, fgColor, bgColor)
+        expect(1, win, "table")
+        expect(2, x, "number")
+        expect(3, y, "number")
+        expect(4, width, "number")
+        expect(5, text, "string")
+        fgColor = expect(6, fgColor, "number", "nil") or colors.white
+        bgColor = expect(7, bgColor, "number", "nil") or colors.black
+        assert(#text <= width, "string is too long")
+        win.setCursorPos(x + math.floor((width - #text) / 2), y)
+        win.setTextColor(fgColor)
+        win.setBackgroundColor(bgColor)
+        win.write(text)
+    end
+
+    --- Draws a horizontal line at a position with the specified width.
+    ---@param win window The window to draw on
+    ---@param x number The X position of the left side of the line
+    ---@param y number The Y position of the line
+    ---@param width number The width/length of the line
+    ---@param fgColor color|nil The color of the line (defaults to white)
+    ---@param bgColor color|nil The color of the background (defaults to black)
+    function PrimeUI.horizontalLine(win, x, y, width, fgColor, bgColor)
+        expect(1, win, "table")
+        expect(2, x, "number")
+        expect(3, y, "number")
+        expect(4, width, "number")
+        fgColor = expect(5, fgColor, "number", "nil") or colors.white
+        bgColor = expect(6, bgColor, "number", "nil") or colors.black
+        -- Use drawing characters to draw a thin line.
+        win.setCursorPos(x, y)
+        win.setTextColor(fgColor)
+        win.setBackgroundColor(bgColor)
+        win.write(("\x8C"):rep(width))
+    end
+
+    --- Runs a function or action repeatedly after a specified time period until canceled.
+    --- If a function is passed as an action, it may return a number to change the
+    --- period, or `false` to stop it.
+    ---@param time number The amount of time to wait for each time, in seconds
+    ---@param action function|string The function to call when the timer completes, or a `run` event to send
+    ---@return function cancel A function to cancel the timer
+    function PrimeUI.interval(time, action)
+        expect(1, time, "number")
+        expect(2, action, "function", "string")
+        -- Start the timer.
+        local timer = os.startTimer(time)
+        -- Add a task to wait for the timer.
+        PrimeUI.addTask(function()
             while true do
-                local _, a7 = os.pullEvent("timer")
-                if a7 == a6 then
-                    local n;
-                    if type(u) == "string" then
-                        b.resolve("timeout", u)
+                -- Wait for a timer event.
+                local _, tm = os.pullEvent("timer")
+                if tm == timer then
+                    -- Fire the timer action.
+                    local res
+                    if type(action) == "string" then
+                        PrimeUI.resolve("timeout", action)
                     else
-                        n = u()
+                        res = action()
                     end
-                    if type(n) == "number" then
-                        a5 = n
+                    -- Check the return value and adjust time accordingly.
+                    if type(res) == "number" then
+                        time = res
                     end
-                    if n ~= false then
-                        a6 = os.startTimer(a5)
+                    -- Set a new timer if not canceled.
+                    if res ~= false then
+                        timer = os.startTimer(time)
                     end
                 end
             end
         end)
+        -- Return a function to cancel the timer.
         return function()
-            os.cancelTimer(a6)
+            os.cancelTimer(timer)
         end
     end
 
-    function b.keyAction(a8, u)
-        a(1, a8, "number")
-        a(2, u, "function", "string")
-        b.addTask(function()
+    --- Adds an action to trigger when a key is pressed.
+    ---@param key key The key to trigger on, from `keys.*`
+    ---@param action function|string A function to call when clicked, or a string to use as a key for a `run` return event
+    function PrimeUI.keyAction(key, action)
+        expect(1, key, "number")
+        expect(2, action, "function", "string")
+        PrimeUI.addTask(function()
             while true do
-                local _, a9 = os.pullEvent("key")
-                if a9 == a8 then
-                    if type(u) == "string" then
-                        b.resolve("keyAction", u)
+                local _, param1 = os.pullEvent("key") -- wait for key
+                if param1 == key then
+                    if type(action) == "string" then
+                        PrimeUI.resolve("keyAction", action)
                     else
-                        u()
+                        action()
                     end
                 end
             end
         end)
     end
 
-    -- function b.keyCombo(a8,aa,ab,ac,u)a(1,a8,"number")a(2,aa,"boolean")a(3,ab,"boolean")a(4,ac,"boolean")a(5,u,"function","string")b.addTask(function()local ad,ae,af=false,false,false;while true do local x,a9,ag=os.pullEvent()if x=="key"then if a9==a8 and ad==aa and ae==ab and af==ac and not ag then if type(u)=="string"then b.resolve("keyCombo",u)else u()end elseif a9==keys.leftCtrl or a9==keys.rightCtrl then ad=true elseif a9==keys.leftAlt or a9==keys.rightAlt then ae=true elseif a9==keys.leftShift or a9==keys.rightShift then af=true end elseif x=="key_up"then if a9==keys.leftCtrl or a9==keys.rightCtrl then ad=false elseif a9==keys.leftAlt or a9==keys.rightAlt then ae=false elseif a9==keys.leftShift or a9==keys.rightShift then af=false end end end end)end;
-    function b.label(g, h, i, t, q, r)
-        a(1, g, "table")
-        a(2, h, "number")
-        a(3, i, "number")
-        a(4, t, "string")
-        q = a(5, q, "number", "nil") or colors.white;
-        r = a(6, r, "number", "nil") or colors.black;
-        g.setCursorPos(h, i)
-        g.setTextColor(q)
-        g.setBackgroundColor(r)
-        g.write(t)
+    --- Draws a line of text at a position.
+    ---@param win window The window to draw on
+    ---@param x number The X position of the left side of the text
+    ---@param y number The Y position of the text
+    ---@param text string The text to draw
+    ---@param fgColor color|nil The color of the text (defaults to white)
+    ---@param bgColor color|nil The color of the background (defaults to black)
+    function PrimeUI.label(win, x, y, text, fgColor, bgColor)
+        expect(1, win, "table")
+        expect(2, x, "number")
+        expect(3, y, "number")
+        expect(4, text, "string")
+        fgColor = expect(5, fgColor, "number", "nil") or colors.white
+        bgColor = expect(6, bgColor, "number", "nil") or colors.black
+        win.setCursorPos(x, y)
+        win.setTextColor(fgColor)
+        win.setBackgroundColor(bgColor)
+        win.write(text)
     end
 
-    function b.progressBar(g, h, i, o, q, r, ah)
-        a(1, g, "table")
-        a(2, h, "number")
-        a(3, i, "number")
-        a(4, o, "number")
-        q = a(5, q, "number", "nil") or colors.white;
-        r = a(6, r, "number", "nil") or colors.black;
-        a(7, ah, "boolean", "nil")
-        local function ai(aj)
-            a(1, aj, "number")
-            if aj < 0 or aj > 1 then
+    --- Creates a progress bar, which can be updated by calling the returned function.
+    ---@param win window The window to draw on
+    ---@param x number The X position of the left side of the bar
+    ---@param y number The Y position of the bar
+    ---@param width number The width of the bar
+    ---@param fgColor color|nil The color of the activated part of the bar (defaults to white)
+    ---@param bgColor color|nil The color of the inactive part of the bar (defaults to black)
+    ---@param useShade boolean|nil Whether to use shaded areas for the inactive part (defaults to false)
+    ---@return function redraw A function to call to update the progress of the bar, taking a number from 0.0 to 1.0
+    function PrimeUI.progressBar(win, x, y, width, fgColor, bgColor, useShade)
+        expect(1, win, "table")
+        expect(2, x, "number")
+        expect(3, y, "number")
+        expect(4, width, "number")
+        fgColor = expect(5, fgColor, "number", "nil") or colors.white
+        bgColor = expect(6, bgColor, "number", "nil") or colors.black
+        expect(7, useShade, "boolean", "nil")
+        local function redraw(progress)
+            expect(1, progress, "number")
+            if progress < 0 or progress > 1 then
                 error("bad argument #1 (value out of range)", 2)
             end
-            g.setCursorPos(h, i)
-            g.setBackgroundColor(r)
-            g.setBackgroundColor(q)
-            g.write((" "):rep(math.floor(aj * o)))
-            g.setBackgroundColor(r)
-            g.setTextColor(q)
-            g.write((ah and "\x7F" or " "):rep(o - math.floor(aj * o)))
+            -- Draw the active part of the bar.
+            win.setCursorPos(x, y)
+            win.setBackgroundColor(bgColor)
+            win.setBackgroundColor(fgColor)
+            win.write((" "):rep(math.floor(progress * width)))
+            -- Draw the inactive part of the bar, using shade if desired.
+            win.setBackgroundColor(bgColor)
+            win.setTextColor(fgColor)
+            win.write((useShade and "\x7F" or " "):rep(width - math.floor(progress * width)))
         end
-        ai(0)
-        return ai
+        redraw(0)
+        return redraw
     end
 
-    -- function b.scrollBox(g,h,i,o,p,ak,al,am,q,r)a(1,g,"table")a(2,h,"number")a(3,i,"number")a(4,o,"number")a(5,p,"number")a(6,ak,"number")a(7,al,"boolean","nil")a(8,am,"boolean","nil")q=a(9,q,"number","nil")or colors.white;r=a(10,r,"number","nil")or colors.black;if al==nil then al=true end;local F=window.create(g==term and term.current()or g,h,i,o,p)F.setBackgroundColor(r)F.clear()local G=window.create(F,1,1,o-(am and 1 or 0),ak)G.setBackgroundColor(r)G.clear()if am then F.setBackgroundColor(r)F.setTextColor(q)F.setCursorPos(o,p)F.write(ak>p and"\31"or" ")end;h,i=b.getWindowPos(g,h,i)b.addTask(function()local L=1;while true do local l=table.pack(os.pullEvent())ak=select(2,G.getSize())local M;if l[1]=="key"and al then if l[2]==keys.up then M=-1 elseif l[2]==keys.down then M=1 end elseif l[1]=="mouse_scroll"and l[3]>=h and l[3]<h+o and l[4]>=i and l[4]<i+p then M=l[2]end;if M and(L+M>=1 and L+M<=ak-p)then L=L+M;G.reposition(1,2-L)end;if am then F.setBackgroundColor(r)F.setTextColor(q)F.setCursorPos(o,1)F.write(L>1 and"\30"or" ")F.setCursorPos(o,p)F.write(L<ak-p and"\31"or" ")end end end)return G end;
-    function b.selectionBox(g, h, i, o, p, an, u, ao, q, r)
-        a(1, g, "table")
-        a(2, h, "number")
-        a(3, i, "number")
-        a(4, o, "number")
-        a(5, p, "number")
-        a(6, an, "table")
-        a(7, u, "function", "string")
-        a(8, ao, "function", "string", "nil")
-        q = a(9, q, "number", "nil") or colors.white;
-        r = a(10, r, "number", "nil") or colors.black;
-        local ap = window.create(g, h, i, o - 1, p)
-        local aq, ar = 1, 1;
-        local function as()
-            ap.setVisible(false)
-            ap.setBackgroundColor(r)
-            ap.clear()
-            for s = ar, ar + p - 1 do
-                local at = an[s]
-                if not at then
+    --- Creates a list of entries that can each be selected.
+    ---@param win window The window to draw on
+    ---@param x number The X coordinate of the inside of the box
+    ---@param y number The Y coordinate of the inside of the box
+    ---@param width number The width of the inner box
+    ---@param height number The height of the inner box
+    ---@param entries string[] A list of entries to show, where the value is whether the item is pre-selected (or `"R"` for required/forced selected)
+    ---@param action function|string A function or `run` event that's called when a selection is made
+    ---@param selectChangeAction function|string|nil A function or `run` event that's called when the current selection is changed
+    ---@param fgColor color|nil The color of the text (defaults to white)
+    ---@param bgColor color|nil The color of the background (defaults to black)
+    function PrimeUI.selectionBox(win, x, y, width, height, entries, action, selectChangeAction, fgColor, bgColor)
+        expect(1, win, "table")
+        expect(2, x, "number")
+        expect(3, y, "number")
+        expect(4, width, "number")
+        expect(5, height, "number")
+        expect(6, entries, "table")
+        expect(7, action, "function", "string")
+        expect(8, selectChangeAction, "function", "string", "nil")
+        fgColor = expect(9, fgColor, "number", "nil") or colors.white
+        bgColor = expect(10, bgColor, "number", "nil") or colors.black
+        -- Check that all entries are strings.
+        if #entries == 0 then
+            error("bad argument #6 (table must not be empty)", 2)
+        end
+        for i, v in ipairs(entries) do
+            if type(v) ~= "string" then
+                error("bad item " .. i .. " in entries table (expected string, got " .. type(v), 2)
+            end
+        end
+        -- Create container window.
+        local entrywin = window.create(win, x, y, width, height)
+        local selection, scroll = 1, 1
+        -- Create a function to redraw the entries on screen.
+        local function drawEntries()
+            -- Clear and set invisible for performance.
+            entrywin.setVisible(false)
+            entrywin.setBackgroundColor(bgColor)
+            entrywin.clear()
+            -- Draw each entry in the scrolled region.
+            for i = scroll, scroll + height - 1 do
+                -- Get the entry; stop if there's no more.
+                local e = entries[i]
+                if not e then
                     break
                 end
-                ap.setCursorPos(2, s - ar + 1)
-                if s == aq then
-                    ap.setBackgroundColor(q)
-                    ap.setTextColor(r)
+                -- Set the colors: invert if selected.
+                entrywin.setCursorPos(2, i - scroll + 1)
+                if i == selection then
+                    entrywin.setBackgroundColor(fgColor)
+                    entrywin.setTextColor(bgColor)
                 else
-                    ap.setBackgroundColor(r)
-                    ap.setTextColor(q)
+                    entrywin.setBackgroundColor(bgColor)
+                    entrywin.setTextColor(fgColor)
                 end
-                ap.clearLine()
-                ap.write(#at > o - 1 and at:sub(1, o - 4) .. "..." or at)
+                -- Draw the selection.
+                entrywin.clearLine()
+                entrywin.write(#e > width - 1 and e:sub(1, width - 4) .. "..." or e)
             end
-            ap.setCursorPos(o, 1)
-            ap.write(ar > 1 and "\30" or " ")
-            ap.setCursorPos(o, p)
-            ap.write(ar < #an - p + 1 and "\31" or " ")
-            ap.setVisible(true)
+            -- Draw scroll arrows.
+            entrywin.setBackgroundColor(bgColor)
+            entrywin.setTextColor(fgColor)
+            entrywin.setCursorPos(width, 1)
+            entrywin.write("\30")
+            entrywin.setCursorPos(width, height)
+            entrywin.write("\31")
+            -- Send updates to the screen.
+            entrywin.setVisible(true)
         end
-        as()
-        b.addTask(function()
+        -- Draw first screen.
+        drawEntries()
+        -- Add a task for selection keys.
+        PrimeUI.addTask(function()
             while true do
-                local _, a8 = os.pullEvent("key")
-                if a8 == keys.down and aq < #an then
-                    aq = aq + 1;
-                    if aq > ar + p - 1 then
-                        ar = ar + 1
+                local event, key, cx, cy = os.pullEvent()
+                if event == "key" then
+                    if key == keys.down and selection < #entries then
+                        -- Move selection down.
+                        selection = selection + 1
+                        if selection > scroll + height - 1 then
+                            scroll = scroll + 1
+                        end
+                        -- Send action if necessary.
+                        if type(selectChangeAction) == "string" then
+                            PrimeUI.resolve("selectionBox", selectChangeAction, selection)
+                        elseif selectChangeAction then
+                            selectChangeAction(selection)
+                        end
+                        -- Redraw screen.
+                        drawEntries()
+                    elseif key == keys.up and selection > 1 then
+                        -- Move selection up.
+                        selection = selection - 1
+                        if selection < scroll then
+                            scroll = scroll - 1
+                        end
+                        -- Send action if necessary.
+                        if type(selectChangeAction) == "string" then
+                            PrimeUI.resolve("selectionBox", selectChangeAction, selection)
+                        elseif selectChangeAction then
+                            selectChangeAction(selection)
+                        end
+                        -- Redraw screen.
+                        drawEntries()
+                    elseif key == keys.enter then
+                        -- Select the entry: send the action.
+                        if type(action) == "string" then
+                            PrimeUI.resolve("selectionBox", action, entries[selection])
+                        else
+                            action(entries[selection])
+                        end
                     end
-                    if type(ao) == "string" then
-                        b.resolve("selectionBox", ao, aq)
-                    elseif ao then
-                        ao(aq)
+                elseif event == "mouse_click" and key == 1 then
+                    -- Handle clicking the scroll arrows.
+                    local wx, wy = PrimeUI.getWindowPos(entrywin, 1, 1)
+                    if cx == wx + width - 1 then
+                        if cy == wy and selection > 1 then
+                            -- Move selection up.
+                            selection = selection - 1
+                            if selection < scroll then
+                                scroll = scroll - 1
+                            end
+                            -- Send action if necessary.
+                            if type(selectChangeAction) == "string" then
+                                PrimeUI.resolve("selectionBox", selectChangeAction, selection)
+                            elseif selectChangeAction then
+                                selectChangeAction(selection)
+                            end
+                            -- Redraw screen.
+                            drawEntries()
+                        elseif cy == wy + height - 1 and selection < #entries then
+                            -- Move selection down.
+                            selection = selection + 1
+                            if selection > scroll + height - 1 then
+                                scroll = scroll + 1
+                            end
+                            -- Send action if necessary.
+                            if type(selectChangeAction) == "string" then
+                                PrimeUI.resolve("selectionBox", selectChangeAction, selection)
+                            elseif selectChangeAction then
+                                selectChangeAction(selection)
+                            end
+                            -- Redraw screen.
+                            drawEntries()
+                        end
+                    elseif cx >= wx and cx < wx + width - 1 and cy >= wy and cy < wy + height then
+                        local sel = scroll + (cy - wy)
+                        if sel == selection then
+                            -- Select the entry: send the action.
+                            if type(action) == "string" then
+                                PrimeUI.resolve("selectionBox", action, entries[selection])
+                            else
+                                action(entries[selection])
+                            end
+                        else
+                            selection = sel
+                            -- Send action if necessary.
+                            if type(selectChangeAction) == "string" then
+                                PrimeUI.resolve("selectionBox", selectChangeAction, selection)
+                            elseif selectChangeAction then
+                                selectChangeAction(selection)
+                            end
+                            -- Redraw screen.
+                            drawEntries()
+                        end
                     end
-                    as()
-                elseif a8 == keys.up and aq > 1 then
-                    aq = aq - 1;
-                    if aq < ar then
-                        ar = ar - 1
-                    end
-                    if type(ao) == "string" then
-                        b.resolve("selectionBox", ao, aq)
-                    elseif ao then
-                        ao(aq)
-                    end
-                    as()
-                elseif a8 == keys.enter then
-                    if type(u) == "string" then
-                        b.resolve("selectionBox", u, an[aq])
-                    else
-                        u(an[aq])
+                elseif event == "mouse_scroll" then
+                    -- Handle mouse scrolling.
+                    local wx, wy = PrimeUI.getWindowPos(entrywin, 1, 1)
+                    if cx >= wx and cx < wx + width and cy >= wy and cy < wy + height then
+                        if key < 0 and selection > 1 then
+                            -- Move selection up.
+                            selection = selection - 1
+                            if selection < scroll then
+                                scroll = scroll - 1
+                            end
+                            -- Send action if necessary.
+                            if type(selectChangeAction) == "string" then
+                                PrimeUI.resolve("selectionBox", selectChangeAction, selection)
+                            elseif selectChangeAction then
+                                selectChangeAction(selection)
+                            end
+                            -- Redraw screen.
+                            drawEntries()
+                        elseif key > 0 and selection < #entries then
+                            -- Move selection down.
+                            selection = selection + 1
+                            if selection > scroll + height - 1 then
+                                scroll = scroll + 1
+                            end
+                            -- Send action if necessary.
+                            if type(selectChangeAction) == "string" then
+                                PrimeUI.resolve("selectionBox", selectChangeAction, selection)
+                            elseif selectChangeAction then
+                                selectChangeAction(selection)
+                            end
+                            -- Redraw screen.
+                            drawEntries()
+                        end
                     end
                 end
             end
         end)
     end
 
-    function b.textBox(g, h, i, o, p, t, q, r)
-        a(1, g, "table")
-        a(2, h, "number")
-        a(3, i, "number")
-        a(4, o, "number")
-        a(5, p, "number")
-        a(6, t, "string")
-        q = a(7, q, "number", "nil") or colors.white;
-        r = a(8, r, "number", "nil") or colors.black;
-        local a2 = window.create(g, h, i, o, p)
-        function a2.getSize()
-            return o, math.huge
+    --- Creates a text box that wraps text and can have its text modified later.
+    ---@param win window The parent window of the text box
+    ---@param x number The X position of the box
+    ---@param y number The Y position of the box
+    ---@param width number The width of the box
+    ---@param height number The height of the box
+    ---@param text string The initial text to draw
+    ---@param fgColor color|nil The color of the text (defaults to white)
+    ---@param bgColor color|nil The color of the background (defaults to black)
+    ---@return function redraw A function to redraw the window with new contents
+    function PrimeUI.textBox(win, x, y, width, height, text, fgColor, bgColor)
+        expect(1, win, "table")
+        expect(2, x, "number")
+        expect(3, y, "number")
+        expect(4, width, "number")
+        expect(5, height, "number")
+        expect(6, text, "string")
+        fgColor = expect(7, fgColor, "number", "nil") or colors.white
+        bgColor = expect(8, bgColor, "number", "nil") or colors.black
+        -- Create the box window.
+        local box = window.create(win, x, y, width, height)
+        -- Override box.getSize to make print not scroll.
+        function box.getSize()
+            return width, math.huge
         end
-
-        local function ai(au)
-            a(1, au, "string")
-            a2.setBackgroundColor(r)
-            a2.setTextColor(q)
-            a2.clear()
-            a2.setCursorPos(1, 1)
-            local W = term.redirect(a2)
-            print(au)
-            term.redirect(W)
+        -- Define a function to redraw with.
+        local function redraw(_text)
+            expect(1, _text, "string")
+            -- Set window parameters.
+            box.setBackgroundColor(bgColor)
+            box.setTextColor(fgColor)
+            box.clear()
+            box.setCursorPos(1, 1)
+            -- Redirect and draw with `print`.
+            local old = term.redirect(box)
+            print(_text)
+            term.redirect(old)
         end
-        ai(t)
-        return ai
+        redraw(text)
+        return redraw
     end
-
-    -- function b.timeout(a5,u)a(1,a5,"number")a(2,u,"function","string")local a6=os.startTimer(a5)b.addTask(function()while true do local _,a7=os.pullEvent("timer")if a7==a6 then if type(u)=="string"then b.resolve("timeout",u)else u()end end end end)return function()os.cancelTimer(a6)end end;
-    return b
+    return PrimeUI
 end)()
 
 local function dump(o)
     if type(o) == 'table' then
         local s = '{ '
         for k, v in pairs(o) do
-            if type(k) ~= 'number' then k = '"' .. k .. '"' end
+            if type(k) ~= 'number' then
+                k = '"' .. k .. '"'
+            end
             s = s .. '[' .. k .. '] = ' .. dump(v) .. ','
         end
         return s .. '} '
@@ -376,7 +651,7 @@ local Installer = {
             EXIT = "EXIT"
         },
         -- Add an order array to maintain specific menu ordering
-        order = { "INSTALL_PROGRAM", "MANAGE_PROGRAMS", "UPDATE_CORE", "EXIT" },
+        order = {"INSTALL_PROGRAM", "MANAGE_PROGRAMS", "UPDATE_CORE", "EXIT"},
         display = {
             INSTALL_PROGRAM = {
                 text = "Install New Program",
@@ -401,7 +676,7 @@ local Installer = {
 
     boxSizing = {
         mainPadding = 2
-    },
+    }
 }
 
 function Installer:initLogger()
@@ -418,7 +693,9 @@ function Installer:initLogger()
     self.log = {}
     for level, levelName in pairs(self.LOG_LEVELS) do
         -- skip debug log if debug = false
-        if level == self.LOG_LEVELS.DEBUG and not self.debug then return end
+        if level == self.LOG_LEVELS.DEBUG and not self.debug then
+            return
+        end
 
         self.log[level:lower()] = function(msg, ...)
             if self.logFile then
@@ -441,10 +718,24 @@ function Installer:closeLogger()
     end
 end
 
-function Installer:httpGet(url)
-    self.log.debug("HTTP GET: %s", url)
-    local response = http.get(url)
-    return response
+function Installer:httpGet(url, retries)
+    retries = retries or 3
+    local attempt = 1
+
+    while attempt <= retries do
+        self.log.debug("HTTP GET %s (attempt %d/%d)", url, attempt, retries)
+
+        local success, response = pcall(http.get, url)
+        if success and response then
+            return response
+        end
+
+        self.log.warn("Request failed, retrying in %d seconds", attempt)
+        sleep(attempt)
+        attempt = attempt + 1
+    end
+
+    return nil, "Failed after " .. retries .. " attempts"
 end
 
 function Installer:init()
@@ -476,26 +767,58 @@ function Installer:init()
 end
 
 function Installer:loadConfig()
-    if fs.exists(self.CONFIG_PATH) then
-        local file = fs.open(self.CONFIG_PATH, "r")
-        local config = textutils.unserializeJSON(file.readAll())
-        file.close()
-        self.log.debug("Loaded .bng-config: %s", dump(config))
-        return config
-    end
-    return {
+    local config = {
         installedPrograms = {},
         core = {
             version = nil,
-            installedAt = nil,
+            installedAt = nil
+        },
+        settings = {
+            autoUpdate = false,
+            checkUpdates = true
         }
     }
+
+    if fs.exists(self.CONFIG_PATH) then
+        local file = fs.open(self.CONFIG_PATH, "r")
+        if file then
+            local content = file.readAll()
+            file.close()
+
+            local loaded = textutils.unserializeJSON(content)
+            if loaded then
+                -- Merge with defaults preserving structure
+                for k, v in pairs(loaded) do
+                    if type(v) == "table" then
+                        config[k] = config[k] or {}
+                        for sk, sv in pairs(v) do
+                            config[k][sk] = sv
+                        end
+                    else
+                        config[k] = v
+                    end
+                end
+            end
+        end
+        return config
+    end
 end
 
 function Installer:saveConfig(config)
     local file = fs.open(self.CONFIG_PATH, "w")
     file.write(textutils.serializeJSON(config))
     file.close()
+end
+
+function Installer:getInstalledPrograms()
+
+    local bngConfig = self:loadConfig()
+    local installedPrograms = {}
+    for k, v in pairs(bngConfig.installedPrograms) do
+        table.insert(installedPrograms, k)
+    end
+    return installedPrograms
+
 end
 
 --- Gets the registry.json file from the programs repo. This file lists the available programs and their version info, dependencies, etc.
@@ -555,8 +878,8 @@ function Installer:checkCoreRequirements(program)
 
     -- Version check
     if not config.core.version or self:compareVersions(config.core.version, requiredVersion) ~= 0 then
-        local message = string.format("Core library v%s required (current: %s)",
-            requiredVersion, config.core.version or "none")
+        local message = string.format("Core library v%s required (current: %s)", requiredVersion,
+                                      config.core.version or "none")
         self.log.info(message)
         return false, message
     end
@@ -604,29 +927,19 @@ function Installer:checkCoreRequirements(program)
 end
 
 function Installer:compareVersions(v1, v2)
-    -- Handle dev branch comparison
     if v1 == "dev" or v2 == "dev" then
-        return 0 -- Consider dev version equal to anything for comparison
+        return 0
     end
 
-    -- Parse semantic versions
     local function parseVersion(v)
         local major, minor, patch = v:match("(%d+)%.(%d+)%.(%d+)")
-        return {
-            tonumber(major) or 0,
-            tonumber(minor) or 0,
-            tonumber(patch) or 0
-        }
+        return {tonumber(major) or 0, tonumber(minor) or 0, tonumber(patch) or 0}
     end
 
-    local v1parts = parseVersion(v1)
-    local v2parts = parseVersion(v2)
-
+    local parts1, parts2 = parseVersion(v1), parseVersion(v2)
     for i = 1, 3 do
-        if v1parts[i] > v2parts[i] then
-            return 1
-        elseif v1parts[i] < v2parts[i] then
-            return -1
+        if parts1[i] ~= parts2[i] then
+            return parts1[i] > parts2[i] and 1 or -1
         end
     end
     return 0
@@ -636,19 +949,16 @@ function Installer:constructCoreUrl(version)
     if version == "dev" then
         return "https://raw.githubusercontent.com/bngarren/bng-cc-core/dev/src"
     else
-        return string.format(
-            "https://raw.githubusercontent.com/bngarren/bng-cc-core/refs/tags/v%s/src",
-            version
-        )
+        return string.format("https://raw.githubusercontent.com/bngarren/bng-cc-core/refs/tags/v%s/src", version)
     end
 end
 
 function Installer:installCore(version, modules)
     local currentTerm = term.current()
     local progress = ui.progressBar(currentTerm, self.boxSizing.mainPadding, 8, self.boxSizing.contentBox, nil, nil,
-        true)
+                                    true)
     local statusBox = ui.textBox(currentTerm, self.boxSizing.mainPadding, 6, self.boxSizing.contentBox, 1,
-        "Installing core...")
+                                 "Installing core...")
 
     -- Construct correct URL based on version
     local coreBaseUrl = self:constructCoreUrl(version)
@@ -672,17 +982,17 @@ function Installer:installCore(version, modules)
 
         local moduleUrl = string.format("%s/%s.lua", coreBaseUrl, moduleName)
         self:downloadFile(moduleUrl, string.format("%s/common/bng-cc-core/%s.lua", self.BASE_PATH, moduleName),
-            function()
-                currentStep = currentStep + 1
-                progress(currentStep / totalSteps)
-            end)
+                          function()
+            currentStep = currentStep + 1
+            progress(currentStep / totalSteps)
+        end)
     end
 
     -- Update config with core details
     local config = self:loadConfig()
     config.core = {
         version = version,
-        installedAt = os.epoch("utc"),
+        installedAt = os.epoch("utc")
     }
     self:saveConfig(config)
 
@@ -696,7 +1006,7 @@ end
 function Installer:installProgram(program)
     local currentTerm = term.current()
     local progress = ui.progressBar(currentTerm, self.boxSizing.mainPadding, 8, self.boxSizing.contentBox, nil, nil,
-        true)
+                                    true)
     local statusBox = ui.textBox(currentTerm, self.boxSizing.mainPadding, 6, self.boxSizing.contentBox, 1, "")
 
     -- Create program directory
@@ -739,11 +1049,43 @@ function Installer:installProgram(program)
     self:saveConfig(config)
 end
 
-function Installer:showMainMenu()
+function Installer:showYesNoDialogView(title, message)
+    ui.clear()
+
+    local currentY = self.boxSizing.mainPadding + 1
+
+    ui.borderBox(term.current(), self.boxSizing.mainPadding + 1, currentY, self.boxSizing.borderBox, 10)
+
+    currentY = currentY + 1
+
+    ui.textBox(term.current(), self.boxSizing.mainPadding + 1, currentY, self.boxSizing.contentBox - 2, 3,
+               title or "Alert", colors.yellow)
+
+    currentY = currentY + 1
+
+    ui.horizontalLine(term.current(), self.boxSizing.mainPadding + 1, currentY, self.boxSizing.contentBox - 2,
+                      colors.yellow)
+
+    currentY = currentY + 1
+
+    ui.textBox(term.current(), self.boxSizing.mainPadding + 1, currentY, self.boxSizing.contentBox - 2, 4, message or "")
+
+    currentY = currentY + 5
+
+    ui.button(term.current(), self.boxSizing.mainPadding + 4, currentY, "Yes", "yes")
+    ui.button(term.current(), self.boxSizing.mainPadding + 16, currentY, "No", "no")
+
+    local _, action = ui.run()
+    return action
+end
+
+function Installer:showMainMenuView()
     ui.clear()
 
     ui.textBox(term.current(), self.boxSizing.mainPadding, 2, self.boxSizing.contentBox, 3,
-        "BNG Installer v" .. self.VERSION .. "\n\nSelect an option:")
+               "BNG Installer v" .. self.VERSION, colors.cyan)
+
+    ui.textBox(term.current(), self.boxSizing.mainPadding, 4, self.boxSizing.contentBox, 3, "Select an option:")
 
     local display_text = {}
     local descriptions = {}
@@ -759,26 +1101,26 @@ function Installer:showMainMenu()
     ui.borderBox(term.current(), self.boxSizing.mainPadding + 1, 6, self.boxSizing.borderBox, 8)
 
     local descriptionBox = ui.textBox(term.current(), self.boxSizing.mainPadding, 15, self.boxSizing.contentBox, 3,
-        descriptions[1])
+                                      descriptions[1])
 
-    ui.selectionBox(term.current(), self.boxSizing.mainPadding + 1, 6, self.boxSizing.contentBox, 8, display_text, "done",
-        function(opt)
-            descriptionBox(descriptions[opt])
-        end)
+    ui.selectionBox(term.current(), self.boxSizing.mainPadding + 1, 6, self.boxSizing.contentBox, 8, display_text,
+                    "done", function(opt)
+        descriptionBox(descriptions[opt])
+    end)
 
-        local action_type, _, selected_text = ui.run()
-    
-        local selected_id = text_to_id[selected_text]
-        self.log.debug("Main menu selection: %s", selected_id)
-    
-        return action_type, _, selected_id
+    local action_type, _, selected_text = ui.run()
+
+    local selected_id = text_to_id[selected_text]
+    self.log.debug("Main menu selection: %s", selected_id)
+
+    return action_type, _, selected_id
 end
 
-function Installer:showProgramSelector(programs)
+function Installer:showProgramSelectorView(programs)
     ui.clear()
 
     ui.textBox(term.current(), self.boxSizing.mainPadding, 2, self.boxSizing.contentBox, 3,
-        "Select a program to install:")
+               "Select a program to install:")
 
     -- Create arrays for selection box
     local entries = {}
@@ -798,12 +1140,12 @@ function Installer:showProgramSelector(programs)
     ui.borderBox(term.current(), self.boxSizing.mainPadding + 1, 6, self.boxSizing.borderBox, 8)
 
     local descriptionBox = ui.textBox(term.current(), self.boxSizing.mainPadding, 15, self.boxSizing.contentBox, 5,
-        descriptions[1])
+                                      descriptions[1])
 
     ui.selectionBox(term.current(), self.boxSizing.mainPadding + 1, 6, self.boxSizing.contentBox, 8, entries, "done",
-        function(opt)
-            descriptionBox(descriptions[opt])
-        end)
+                    function(opt)
+        descriptionBox(descriptions[opt])
+    end)
 
     local _, _, selection = ui.run()
 
@@ -819,63 +1161,32 @@ function Installer:showProgramSelector(programs)
     end
 end
 
-function Installer:showCoreVersionSelector(requiredVersion)
+function Installer:showCoreVersionSelectorView(requiredVersion)
     self.log.debug("Showing core version selector. Required version: %s", requiredVersion)
     ui.clear()
 
     local currentVersion = self:loadConfig().core.version or "none"
 
-    ui.textBox(
-        term.current(),
-        self.boxSizing.mainPadding,
-        2,
-        self.boxSizing.contentBox,
-        3,
-        string.format("Select bng-cc-core Version\nCurrent: %s", currentVersion)
-    )
+    ui.textBox(term.current(), self.boxSizing.mainPadding, 2, self.boxSizing.contentBox, 3,
+               string.format("Select bng-cc-core Version\nCurrent: %s", currentVersion))
 
-    local options = {
-        string.format("v%s (Required)", requiredVersion),
-        "Development Branch (Latest)"
-    }
+    local options = {string.format("v%s (required)", requiredVersion), "Development Branch (latest)"}
 
-    local descriptions = {
-        string.format(
-            "Install core v%s - this is the version required by the selected program.\nThis version will be downloaded from the corresponding GitHub release.",
-            requiredVersion
-        ),
-        "Install the latest code from the dev branch.\nWarning: This version may be unstable but will have the latest features and fixes."
-    }
+    local descriptions = {string.format(
+        "Install core v%s - this is the version required by local program(s).\nThis version will be downloaded from the corresponding GitHub release.",
+        requiredVersion),
+                          "Install the latest code from the dev branch.\nWarning: This version may be unstable but will have the latest features and fixes."}
 
-    ui.borderBox(
-        term.current(),
-        self.boxSizing.mainPadding + 1,
-        6,
-        self.boxSizing.borderBox,
-        8
-    )
+    ui.borderBox(term.current(), self.boxSizing.mainPadding + 1, 6, self.boxSizing.borderBox, 8)
 
-    local descriptionBox = ui.textBox(
-        term.current(),
-        self.boxSizing.mainPadding,
-        15,
-        self.boxSizing.contentBox,
-        5, -- Increased height to accommodate longer descriptions
-        descriptions[1]
-    )
+    local descriptionBox =
+        ui.textBox(term.current(), self.boxSizing.mainPadding, 15, self.boxSizing.contentBox, 5, -- Increased height to accommodate longer descriptions
+                   descriptions[1])
 
-    ui.selectionBox(
-        term.current(),
-        self.boxSizing.mainPadding + 1,
-        6,
-        self.boxSizing.contentBox,
-        8,
-        options,
-        "done",
-        function(opt)
-            descriptionBox(descriptions[opt])
-        end
-    )
+    ui.selectionBox(term.current(), self.boxSizing.mainPadding + 1, 6, self.boxSizing.contentBox, 8, options, "done",
+                    function(opt)
+        descriptionBox(descriptions[opt])
+    end)
 
     local _, _, selection = ui.run()
 
@@ -894,7 +1205,7 @@ function Installer:showComplete(name)
     ui.clear()
 
     ui.textBox(term.current(), self.boxSizing.mainPadding, 2, self.boxSizing.contentBox, 3,
-        name .. " has been installed successfully!")
+               name .. " has been installed successfully!")
 
     ui.button(term.current(), self.boxSizing.mainPadding, 6, "Continue", "done")
 
@@ -908,7 +1219,7 @@ function Installer:showProgramManager()
 
     if not next(config.installedPrograms) then
         ui.textBox(term.current(), self.boxSizing.mainPadding, 2, self.boxSizing.contentBox, 3,
-            "No programs are currently installed.")
+                   "No programs are currently installed.")
 
         ui.button(term.current(), self.boxSizing.mainPadding, 6, "Back", "done")
 
@@ -925,18 +1236,18 @@ function Installer:showProgramManager()
     for name, info in pairs(config.installedPrograms) do
         table.insert(entries, name)
         table.insert(descriptions, string.format("Version: %s\nInstalled: %s", info.version,
-            os.date("%Y-%m-%d %H:%M", info.installedAt / 1000)))
+                                                 os.date("%Y-%m-%d %H:%M", info.installedAt / 1000)))
     end
 
     ui.borderBox(term.current(), self.boxSizing.mainPadding + 1, 6, self.boxSizing.borderBox, 8)
 
     local descriptionBox = ui.textBox(term.current(), self.boxSizing.mainPadding, 15, self.boxSizing.contentBox, 3,
-        descriptions[1])
+                                      descriptions[1])
 
     ui.selectionBox(term.current(), self.boxSizing.mainPadding + 1, 6, self.boxSizing.contentBox, 8, entries, "done",
-        function(opt)
-            descriptionBox(descriptions[opt])
-        end)
+                    function(opt)
+        descriptionBox(descriptions[opt])
+    end)
 
     ui.button(term.current(), self.boxSizing.mainPadding, self.boxSizing.contentBox - 4, "Remove", "remove")
 
@@ -961,8 +1272,8 @@ function Installer:confirmInstall(program)
     local coreOk, coreMessage = self:checkCoreRequirements(program)
 
     local message = string.format("Program: %s v%s\nAuthor: %s\n\nCore Status: %s\n\nProceed with installation?",
-        program.title, program.version, program.author,
-        coreOk and "Ready" or "Needs core v" .. program.core.version)
+                                  program.title, program.version, program.author,
+                                  coreOk and "Ready" or "Needs core v" .. program.core.version)
 
     ui.textBox(term.current(), self.boxSizing.mainPadding, 2, self.boxSizing.contentBox, 8, message)
 
@@ -994,17 +1305,17 @@ function Installer:run(config)
     local success, err = pcall(function()
         local run = true
         while run do
-            local _, _, selection = self:showMainMenu()
+            local _, _, selection = self:showMainMenuView()
 
             if selection == self.MAIN_MENU.options.INSTALL_PROGRAM then
                 local registry = self:fetchRegistry()
                 if registry then
-                    local selectedProgram = self:showProgramSelector(registry.programs)
+                    local selectedProgram = self:showProgramSelectorView(registry.programs)
                     if selectedProgram then
                         local action = self:confirmInstall(selectedProgram)
 
                         if action == "core" then
-                            local selectedVersion = self:showCoreVersionSelector(selectedProgram.core.version)
+                            local selectedVersion = self:showCoreVersionSelectorView(selectedProgram.core.version)
                             -- Install required core version and modules
                             self:installCore(selectedVersion, selectedProgram.core.modules)
                             -- Show installation screen again
@@ -1020,14 +1331,76 @@ function Installer:run(config)
             elseif selection == self.MAIN_MENU.options.MANAGE_PROGRAMS then
                 self:showProgramManager()
             elseif selection == self.MAIN_MENU.options.UPDATE_CORE then
-                
+
+                local installedPrograms = self:getInstalledPrograms()
+
+                if #installedPrograms < 1 then
+                    -- Should offer a "Latest Release" version
+                    -- Need to hit the github API to get release/tag list
+                    break
+                end
+
+                -- If we have installed programs already, we offer the minimum required core version or a dev branch
+                local registry = self:fetchRegistry()
+                if registry and #registry.programs > 0 then
+                    -- find out the minimum bng-cc-core version required
+                    local minCoreVersion
+                    for _, programName in ipairs(installedPrograms) do
+                        -- find the required core version for this program in the registry
+                        local version
+                        for _, registryProgram in ipairs(registry.programs) do
+                            if registryProgram.name == programName then
+                                version = registryProgram.core.version
+                                self.log.debug("%s requires bng-cc-core v%s", programName, version)
+                                break
+                            end
+
+                        end
+
+                        if version then
+                            if not minCoreVersion then
+                                minCoreVersion = version
+                                self.log.debug("Previously unset minimum core version is now v%s", minCoreVersion)
+                            else
+                                if self.compareVersions(version, minCoreVersion) >= 0 then
+                                    minCoreVersion = version
+                                    self.log.debug("v%s is newer than v%s, minimum core version updated", version,
+                                                   minCoreVersion)
+                                end
+                            end
+                        end
+                    end
+                    if not minCoreVersion then
+                        self.log.error("Could not find a non-nil minimum bng-cc-core program for installed programs.")
+                        break
+                    end
+                    self.log.debug("Installed program(s) required a minimum bng-cc-core of v%s", minCoreVersion)
+
+                    local selectedVersion = self:showCoreVersionSelectorView(minCoreVersion)
+
+                    -- get current core version
+                    local currentCoreVersion = self:loadConfig().core.version
+
+                    if selectedVersion == currentCoreVersion then
+                        local action = self:showYesNoDialogView("Alert", string.format(
+                                                                    "bng-cc-core (%s) is already installed.\nReinstall?",
+                                                                    selectedVersion))
+                        -- handle response
+                    else
+                        local action = self:showYesNoDialogView("Confirm", string.format(
+                                                                    "This will install bng-cc-core (%s).\nContinue?",
+                                                                    selectedVersion))
+                        -- handle response
+                    end
+
+                end
+
             elseif selection == self.MAIN_MENU.options.EXIT then
                 run = false
                 break
             end
         end
-    end
-    )
+    end)
 
     ui.clear()
 
@@ -1035,12 +1408,11 @@ function Installer:run(config)
         self.log.error("Installer crashed: %s", err)
     end
 
-
     -- Cleanup
     self:closeLogger()
 end
 
-local args = { ... }
+local args = {...}
 
 local installConfig = {}
 
