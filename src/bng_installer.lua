@@ -631,6 +631,9 @@ local function dump(o)
     end
 end
 
+local expect = require("cc.expect")
+local expect, field = expect.expect, expect.field
+
 local Installer = {
     VERSION = "1.0.0",
     PROGRAM_REGISTRY_URL = "https://raw.githubusercontent.com/bngarren/computer-craft/master/registry.json",
@@ -694,26 +697,39 @@ function Installer:initLogger()
     end
 
     -- Open log file with w+ (always overwrites file on each run)
-    self.logFile = fs.open(self.LOG_PATH, "w+")
+    local logFile = fs.open(self.LOG_PATH, "w+")
+    if not logFile then
+        error(string.format("Failed to open log file: %s", self.LOG_PATH))
+    end
 
     -- Create log functions for each level
     self.log = {}
-    for level, levelName in pairs(self.LOG_LEVELS) do
-        -- skip debug log if debug = false
-        if level == self.LOG_LEVELS.DEBUG and not self.debug then
-            return
+    local debugEnabled = self.debug
+
+    -- Add stack trace to error logs
+    local function getStackTrace()
+        local trace = {}
+        for i = 3, 6 do
+            local info = debug.getinfo(i)
+            if not info then break end
+            table.insert(trace, string.format("%s:%d", info.short_src, info.currentline))
         end
+        return table.concat(trace, " <- ")
+    end
 
+    for level, levelName in pairs(self.LOG_LEVELS) do
         self.log[level:lower()] = function(msg, ...)
-            if self.logFile then
-                local formatted = string.format(msg, ...)
-                local timestamp = os.date("[%Y-%m-%d %H:%M:%S]")
-                local logLine = string.format("%s [%s] %s", timestamp, levelName, formatted)
+            if level == "DEBUG" and not debugEnabled then return end
 
-                -- Write to file
-                self.logFile.writeLine(logLine)
-                self.logFile.flush()
+            local formatted = string.format(msg, ...)
+            local timestamp = os.date("[%Y-%m-%d %H:%M:%S]")
+            local entry = string.format("%s [%s] %s", timestamp, levelName, formatted)
+
+            if level == "ERROR" then
+                entry = entry .. "\nStack: " .. getStackTrace()
             end
+            logFile.writeLine(entry)
+            logFile.flush()
         end
     end
 end
@@ -726,6 +742,9 @@ function Installer:closeLogger()
 end
 
 function Installer:httpGet(url, retries)
+    expect(1, url, "string")
+    expect(2, retries, "number", "nil")
+
     retries = retries or 3
     local attempt = 1
 
@@ -811,6 +830,8 @@ function Installer:loadConfig()
 end
 
 function Installer:saveConfig(config)
+    expect(1, config, "table")
+
     local file = fs.open(self.CONFIG_PATH, "w")
     file.write(textutils.serializeJSON(config))
     file.close()
@@ -828,8 +849,6 @@ end
 --- Gets the registry.json file from the programs repo. This file lists the available programs and their version info, dependencies, etc.
 --- @return table registry Lua table containing the registry data
 function Installer:fetchRegistry()
-    local currentTerm = term.current()
-    ui.textBox(currentTerm, self.boxSizing.mainPadding, 6, self.boxSizing.contentBox, 1, "Fetching program registry...")
 
     local response = self:httpGet(self.PROGRAM_REGISTRY_URL)
     if not response then
@@ -841,7 +860,28 @@ function Installer:fetchRegistry()
     return registry
 end
 
+function Installer:writeFile(path, content)
+    expect(1, path, "string")
+    expect(2, content, "string")
+
+    local dir = fs.getDir(path)
+    if not fs.exists(dir) then fs.makeDir(dir) end
+
+    local file = fs.open(path, "w")
+    if file then
+        file.write(content)
+        file.close()
+        self.log.debug("File written: %s", path)
+    else
+        self.log.error("Failed to write file: %s", path)
+    end
+end
+
 function Installer:downloadFile(url, path, currentProgress)
+    expect(1, url, "string")
+    expect(2, path, "string")
+    expect(3, currentProgress, "function", "nil")
+
     local response = self:httpGet(url)
     if not response then
         error("Failed to download: " .. url)
@@ -850,16 +890,7 @@ function Installer:downloadFile(url, path, currentProgress)
     local content = response.readAll()
     response.close()
 
-    -- Ensure directory exists
-    local dir = fs.getDir(path)
-    if dir then
-        fs.makeDir(dir)
-    end
-
-    -- Write file
-    local file = fs.open(path, "w")
-    file.write(content)
-    file.close()
+    self:writeFile(path, content)
 
     if currentProgress then
         currentProgress()
@@ -885,6 +916,8 @@ end
 
 function Installer:checkCoreRequirements(program)
     self.log.debug("Checking core requirements for %s", program.name)
+
+    expect(1, program, "table")
 
     -- Check if core is installed at correct version
     local config = self:loadConfig()
@@ -936,6 +969,9 @@ function Installer:checkCoreRequirements(program)
 end
 
 function Installer.compareVersions(v1, v2)
+    expect(1, v1, "string")
+    expect(2, v2, "string")
+
     if v1 == "dev" or v2 == "dev" then
         return 0
     end
@@ -955,6 +991,8 @@ function Installer.compareVersions(v1, v2)
 end
 
 function Installer:constructCoreUrl(version)
+    expect(1, version, "string")
+
     if version == "dev" then
         return "https://raw.githubusercontent.com/bngarren/bng-cc-core/dev/src"
     else
@@ -1008,6 +1046,9 @@ function Installer:getMinimumCoreVersion(...)
 end
 
 function Installer:installCore(version, modules)
+    expect(1, version, "string")
+    expect(2, modules, "table", "nil")
+
     local currentTerm = term.current()
     local progress = ui.progressBar(currentTerm, self.boxSizing.mainPadding, 8, self.boxSizing.contentBox, nil, nil,
         true)
@@ -1072,6 +1113,8 @@ function Installer:installDependency(dep, progressCallback)
 end
 
 function Installer:installProgram(program)
+    expect(1, program, "table")
+
     local currentTerm = term.current()
     local progress = ui.progressBar(currentTerm, self.boxSizing.mainPadding, 8, self.boxSizing.contentBox, nil, nil,
         true)
@@ -1117,63 +1160,114 @@ function Installer:installProgram(program)
     self:saveConfig(config)
 end
 
-function Installer:showContinueDialogView(title, message, buttonText, color)
+
+function Installer:showDialog(options)
+    expect(1, options, "table")
+    field(options, "title", "string", "nil")
+    field(options, "message", "string")
+    field(options, "buttons", "table")
+    field(options, "color", "number", "nil")
+    field(options, "height", "number", "nil")
+
     ui.clear()
 
     local currentY = self.boxSizing.mainPadding + 1
+    local width = self.boxSizing.contentBox - 2
+    local height = options.height or 12
 
-    ui.borderBox(term.current(), self.boxSizing.mainPadding + 1, currentY, self.boxSizing.borderBox, 10)
-
+    ui.borderBox(term.current(), self.boxSizing.mainPadding + 1, currentY, self.boxSizing.borderBox, height)
+    -- draw title
     currentY = currentY + 1
-
-    ui.textBox(term.current(), self.boxSizing.mainPadding + 1, currentY, self.boxSizing.contentBox - 2, 3,
-        title or "Info", color or colors.lightBlue)
-
+    ui.textBox(term.current(), self.boxSizing.mainPadding + 1, currentY, width, 3, options.title or "Message",
+        options.color or colors.lightGray)
+    -- draw separator
     currentY = currentY + 1
-
-    ui.horizontalLine(term.current(), self.boxSizing.mainPadding + 1, currentY, self.boxSizing.contentBox - 2,
-        color or colors.lightBlue)
-
-    currentY = currentY + 1
-
-    ui.textBox(term.current(), self.boxSizing.mainPadding + 1, currentY, self.boxSizing.contentBox - 2, 4, message or "")
-
-    currentY = currentY + 5
-
-    ui.button(term.current(), self.boxSizing.mainPadding + 4, currentY, buttonText or "Continue", "continue")
+    ui.horizontalLine(term.current(), self.boxSizing.mainPadding + 1, currentY, width, options.color or colors.lightGray)
+    -- draw message
+    currentY = currentY + 2
+    ui.textBox(term.current(), self.boxSizing.mainPadding + 1, currentY, width, 4, options.message or "")
+    -- draw buttons
+    currentY = self.boxSizing.mainPadding + height - 2
+    local buttonSpacing = math.floor(width / #options.buttons)
+    for i, button in ipairs(options.buttons) do
+        ui.button(
+            term.current(),
+            self.boxSizing.mainPadding + (i - 1) * buttonSpacing + 4,
+            currentY,
+            button.text,
+            button.action,
+            button.color or colors.lightGray
+        )
+    end
 
     local _, action = ui.run()
     return action
 end
 
-function Installer:showYesNoDialogView(title, message, color)
-    ui.clear()
+function Installer:showContinueDialogView(options, buttonText)
+    expect(1, options, "table")
+    expect(2, buttonText, "string", "nil")
 
-    local currentY = self.boxSizing.mainPadding + 1
+    local dialogOptions = {
+        title = field(options, "title", "string", "nil") or "Message",
+        message = field(options, "message", "string"),
+        color = field(options, "color", "number", "nil") or colors.white,
+        height = field(options, "height", "number", "nil") or 12,
+        buttons = {
+            {
+                text = buttonText or "Continue",
+                action = "continue"
+            }
+        }
+    }
 
-    ui.borderBox(term.current(), self.boxSizing.mainPadding + 1, currentY, self.boxSizing.borderBox, 10)
+    return self:showDialog(dialogOptions)
+end
 
-    currentY = currentY + 1
+---Shows a dialog with Yes/No buttons
+---@return boolean:Returns "yes" or "no"
+function Installer:showYesNoDialogView(options)
+    expect(1, options, "table")
 
-    ui.textBox(term.current(), self.boxSizing.mainPadding + 1, currentY, self.boxSizing.contentBox - 2, 3,
-        title or "Alert", color or colors.yellow)
+    local dialogOptions = {
+        title = field(options, "title", "string", "nil") or "Confirm",
+        message = field(options, "message", "string"),
+        color = field(options, "color", "number", "nil") or colors.yellow,
+        height = field(options, "height", "number", "nil") or 12,
+        buttons = {
+            {
+                text = "Yes",
+                action = "yes",
+                color = colors.green
+            },
+            {
+                text = "No",
+                action = "no",
+                color = colors.red
+            }
+        }
+    }
 
-    currentY = currentY + 1
+    return self:showDialog(dialogOptions)
+end
 
-    ui.horizontalLine(term.current(), self.boxSizing.mainPadding + 1, currentY, self.boxSizing.contentBox - 2,
-        color or colors.yellow)
+function Installer:drawBackButton()
+    expect(1, self, "table")
 
-    currentY = currentY + 1
+    -- Position in top-right corner, accounting for padding
+    local termW, _ = term.getSize()
+    local buttonX = termW - 6 - self.boxSizing.mainPadding
+    local buttonY = 2
 
-    ui.textBox(term.current(), self.boxSizing.mainPadding + 1, currentY, self.boxSizing.contentBox - 2, 4, message or "")
-
-    currentY = currentY + 5
-
-    ui.button(term.current(), self.boxSizing.mainPadding + 4, currentY, "Yes", "yes")
-    ui.button(term.current(), self.boxSizing.mainPadding + 16, currentY, "No", "no")
-
-    local _, action = ui.run()
-    return action
+    ui.button(
+        term.current(),
+        buttonX,
+        buttonY,
+        "Back",
+        "back",
+        colors.white,
+        colors.gray
+    )
 end
 
 function Installer:showMainMenuView()
@@ -1214,10 +1308,14 @@ function Installer:showMainMenuView()
 end
 
 function Installer:showProgramSelectorView(programs)
+    expect(1, programs, "table")
+
     ui.clear()
 
     ui.textBox(term.current(), self.boxSizing.mainPadding, 2, self.boxSizing.contentBox, 3,
         "Select a program to install:")
+
+    self:drawBackButton()
 
     -- Create arrays for selection box
     local entries = {}
@@ -1244,14 +1342,17 @@ function Installer:showProgramSelectorView(programs)
             descriptionBox(descriptions[opt])
         end)
 
-    local _, _, selection = ui.run()
+    local _, action, selection = ui.run()
+
+    if action == "back" then
+        return nil
+    end
 
     -- Extract program name from selection and return program
     if selection then
         for _, program in ipairs(programs) do
             if selection:find(program.title, 1, true) then
                 self.log.debug("Selected " .. program.name .. "\n" .. dump(program))
-
                 return program
             end
         end
@@ -1324,12 +1425,16 @@ function Installer:showCoreVersionSelectorView(_requiredVersion)
     local descriptionBox = ui.textBox(term.current(), self.boxSizing.mainPadding, 15, self.boxSizing.contentBox, 5,
         descriptions[1])
 
+    self:drawBackButton()
+
     ui.selectionBox(term.current(), self.boxSizing.mainPadding + 1, 6, self.boxSizing.contentBox, 8, options, "done",
         function(opt)
             descriptionBox(descriptions[opt])
         end)
 
-    local _, _, selection = ui.run()
+    local _, action, selection = ui.run()
+
+    if action == "back" then return nil end
 
     local selectedVersion
     if selection:match("Development Branch") then
@@ -1340,17 +1445,24 @@ function Installer:showCoreVersionSelectorView(_requiredVersion)
 
     -- Handle version installation confirmation
     if selectedVersion == currentVersion then
-        local action = self:showYesNoDialogView("Alert", string.format(
-            "bng-cc-core (%s) is already installed.\nReinstall?",
-            selectedVersion))
-        if not action then
+        local action = self:showYesNoDialogView({
+            title = "Alert",
+            message = string.format(
+                "bng-cc-core (%s) is already installed.\nReinstall?",
+                selectedVersion)
+        })
+        if action == "no" then
             return nil
         end
     else
-        local action = self:showYesNoDialogView("Confirm", string.format(
-            "This will install bng-cc-core (%s).\nContinue?",
-            selectedVersion))
-        if not action then
+        local action = self:showYesNoDialogView({
+            title = "Confirm",
+            message = string.format(
+                "This will install bng-cc-core (%s).\nContinue?",
+                selectedVersion),
+            color = colors.green
+        })
+        if action == "no" then
             return nil
         end
     end
@@ -1359,7 +1471,7 @@ function Installer:showCoreVersionSelectorView(_requiredVersion)
     return selectedVersion
 end
 
-function Installer:showComplete(name)
+function Installer:showCompleteView(name)
     ui.clear()
 
     ui.textBox(term.current(), self.boxSizing.mainPadding, 2, self.boxSizing.contentBox, 3,
@@ -1370,7 +1482,7 @@ function Installer:showComplete(name)
     ui.run()
 end
 
-function Installer:showProgramManager()
+function Installer:showProgramManagerView()
     ui.clear()
 
     local config = self:loadConfig()
@@ -1419,11 +1531,11 @@ function Installer:showProgramManager()
         config.installedPrograms[selection] = nil
         self:saveConfig(config)
 
-        self:showComplete("Program removed")
+        self:showCompleteView("Program removed")
     end
 end
 
-function Installer:confirmInstall(program)
+function Installer:confirmInstallProgramView(program)
     ui.clear()
 
     -- Check core requirements
@@ -1433,16 +1545,15 @@ function Installer:confirmInstall(program)
         program.title, program.version, program.author,
         coreOk and "Ready" or "Needs core v" .. program.core.version)
 
-    ui.textBox(term.current(), self.boxSizing.mainPadding, 2, self.boxSizing.contentBox, 8, message)
-
-    if not coreOk then
-        ui.button(term.current(), self.boxSizing.mainPadding, 11, "Install Core First", "core")
-    end
+    ui.textBox(term.current(), self.boxSizing.mainPadding, 2, self.boxSizing.contentBox - 4, 8, message)
 
     ui.button(term.current(), self.boxSizing.mainPadding, 13, "Install", "install")
     ui.button(term.current(), self.boxSizing.mainPadding + 12, 13, "Cancel", "cancel")
 
+    self:drawBackButton()
+
     local _, action = ui.run()
+
     return action
 end
 
@@ -1471,33 +1582,31 @@ function Installer:run(config)
                 if registry then
                     local selectedProgram = self:showProgramSelectorView(registry.programs)
                     if selectedProgram then
-                        local action = self:confirmInstall(selectedProgram)
-
-                        if action == "core" then
-                            local selectedVersion = self:showCoreVersionSelectorView(selectedProgram.core.version)
-                            -- Install required core version and modules
-                            self:installCore(selectedVersion, selectedProgram.core.modules)
-                            -- Show installation screen again
-                            action = self:confirmInstall(selectedProgram)
-                        end
-
-                        if action == "install" then
-                            self:installCore(selectedProgram.core.version, selectedProgram.core.modules)
-                            self:installProgram(selectedProgram)
-                            self:showComplete(selectedProgram.title)
-                        end
+                        local success = false
+                        repeat
+                            local action = self:confirmInstallProgramView(selectedProgram)
+                            if action == "install" then
+                                self:installCore(selectedProgram.core.version, selectedProgram.core.modules)
+                                self:installProgram(selectedProgram)
+                                self:showCompleteView(selectedProgram.title)
+                                success = true
+                            elseif action == "back" or action == "cancel" then
+                                break
+                            end
+                        until success == true
                     end
                 end
                 -- MAIN MENU > MANAGE PROGRAMS
             elseif selection == self.MAIN_MENU.options.MANAGE_PROGRAMS then
-                self:showProgramManager()
+                self:showProgramManagerView()
                 -- MAIN MENU > UPDATE CORE
             elseif selection == self.MAIN_MENU.options.UPDATE_CORE then
                 -- get installed programs
                 -- TODO use cache
                 local installedPrograms = self:getInstalledPrograms()
                 if #installedPrograms < 1 then
-                    self:showContinueDialogView(nil, "At least 1 program must be installed to update the core library.")
+                    self:showContinueDialogView({ message =
+                    "At least 1 program must be installed to update the core library." })
                 else
                     local selectedVersion = self:showCoreVersionSelectorView()
                     if selectedVersion then
@@ -1507,7 +1616,11 @@ function Installer:run(config)
                 end
                 -- MAIN MENU > REMOVE ALL
             elseif selection == self.MAIN_MENU.options.REMOVE_ALL then
-                local result = self:showYesNoDialogView("Warning", "Are you sure you want to delete all files?")
+                local result = self:showYesNoDialogView({
+                    title = "Warning",
+                    message =
+                    "Are you sure you want to delete all files?"
+                })
                 if result == "yes" then
                     fs.delete(self.CONFIG_PATH)
                     fs.delete(self.BASE_PATH)
