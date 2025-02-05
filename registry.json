@@ -16,11 +16,15 @@
             "files": [
                 {
                     "url": "https://raw.githubusercontent.com/bngarren/computer-craft/master/src/programs/energy-monitor-jan-2025/startup.lua",
-                    "path": "main.lua"
+                    "path": "startup.lua"
                 },
                 {
                     "url": "https://raw.githubusercontent.com/bngarren/computer-craft/master/src/programs/energy-monitor-jan-2025/config.lua",
                     "path": "config.lua"
+                },
+                {
+                    "url": "https://raw.githubusercontent.com/bngarren/computer-craft/master/src/programs/energy-monitor-jan-2025/test.lua",
+                    "path": "test.lua"
                 }
             ],
             "dependencies": [
