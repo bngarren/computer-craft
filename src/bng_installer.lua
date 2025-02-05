@@ -570,6 +570,39 @@ local ui = (function()
         end)
     end
 
+    --- Draws a block of text inside a window with word wrapping, optionally resizing the window to fit.
+    ---@param win window The window to draw in
+    ---@param text string The text to draw
+    ---@param resizeToFit boolean|nil Whether to resize the window to fit the text (defaults to false). This is useful for scroll boxes.
+    ---@param fgColor color|nil The color of the text (defaults to white)
+    ---@param bgColor color|nil The color of the background (defaults to black)
+    ---@return number lines The total number of lines drawn
+    function PrimeUI.drawText(win, text, resizeToFit, fgColor, bgColor)
+        expect(1, win, "table")
+        expect(2, text, "string")
+        expect(3, resizeToFit, "boolean", "nil")
+        fgColor = expect(4, fgColor, "number", "nil") or colors.white
+        bgColor = expect(5, bgColor, "number", "nil") or colors.black
+        -- Set colors.
+        win.setBackgroundColor(bgColor)
+        win.setTextColor(fgColor)
+        -- Redirect to the window to use print on it.
+        local old = term.redirect(win)
+        -- Draw the text using print().
+        local lines = print(text)
+        -- Redirect back to the original terminal.
+        term.redirect(old)
+        -- Resize the window if desired.
+        if resizeToFit then
+            -- Get original parameters.
+            local x, y = win.getPosition()
+            local w = win.getSize()
+            -- Resize the window.
+            win.reposition(x, y, w, lines)
+        end
+        return lines
+    end
+
     --- Creates a text box that wraps text and can have its text modified later.
     ---@param win window The parent window of the text box
     ---@param x number The X position of the box
@@ -613,6 +646,108 @@ local ui = (function()
         return redraw
     end
 
+    --- Creates a scrollable window, which allows drawing large content in a small area.
+    ---@param win window The parent window of the scroll box
+    ---@param x number The X position of the box
+    ---@param y number The Y position of the box
+    ---@param width number The width of the box
+    ---@param height number The height of the outer box
+    ---@param innerHeight number The height of the inner scroll area
+    ---@param allowArrowKeys boolean|nil Whether to allow arrow keys to scroll the box (defaults to true)
+    ---@param showScrollIndicators boolean|nil Whether to show arrow indicators on the right side when scrolling is available, which reduces the inner width by 1 (defaults to false)
+    ---@param fgColor number|nil The color of scroll indicators (defaults to white)
+    ---@param bgColor color|nil The color of the background (defaults to black)
+    ---@return window inner The inner window to draw inside
+    ---@return fun(pos:number) scroll A function to manually set the scroll position of the window
+    function PrimeUI.scrollBox(win, x, y, width, height, innerHeight, allowArrowKeys, showScrollIndicators, fgColor,
+                               bgColor)
+        expect(1, win, "table")
+        expect(2, x, "number")
+        expect(3, y, "number")
+        expect(4, width, "number")
+        expect(5, height, "number")
+        expect(6, innerHeight, "number")
+        expect(7, allowArrowKeys, "boolean", "nil")
+        expect(8, showScrollIndicators, "boolean", "nil")
+        fgColor = expect(9, fgColor, "number", "nil") or colors.white
+        bgColor = expect(10, bgColor, "number", "nil") or colors.black
+        if allowArrowKeys == nil then
+            allowArrowKeys = true
+        end
+        -- Create the outer container box.
+        local outer = window.create(win == term and term.current() or win, x, y, width, height)
+        outer.setBackgroundColor(bgColor)
+        outer.clear()
+        -- Create the inner scrolling box.
+        local inner = window.create(outer, 1, 1, width - (showScrollIndicators and 1 or 0), innerHeight)
+        inner.setBackgroundColor(bgColor)
+        inner.clear()
+        -- Draw scroll indicators if desired.
+        if showScrollIndicators then
+            outer.setBackgroundColor(bgColor)
+            outer.setTextColor(fgColor)
+            outer.setCursorPos(width, height)
+            outer.write(innerHeight > height and "\31" or " ")
+        end
+        -- Get the absolute position of the window.
+        x, y = PrimeUI.getWindowPos(win, x, y)
+        -- Add the scroll handler.
+        local scrollPos = 1
+        PrimeUI.addTask(function()
+            while true do
+                -- Wait for next event.
+                local ev = table.pack(os.pullEvent())
+                -- Update inner height in case it changed.
+                innerHeight = select(2, inner.getSize())
+                -- Check for scroll events and set direction.
+                local dir
+                if ev[1] == "key" and allowArrowKeys then
+                    if ev[2] == keys.up then
+                        dir = -1
+                    elseif ev[2] == keys.down then
+                        dir = 1
+                    end
+                elseif ev[1] == "mouse_scroll" and ev[3] >= x and ev[3] < x + width and ev[4] >= y and ev[4] < y +
+                    height then
+                    dir = ev[2]
+                end
+                -- If there's a scroll event, move the window vertically.
+                if dir and (scrollPos + dir >= 1 and scrollPos + dir <= innerHeight - height) then
+                    scrollPos = scrollPos + dir
+                    inner.reposition(1, 2 - scrollPos)
+                end
+                -- Redraw scroll indicators if desired.
+                if showScrollIndicators then
+                    outer.setBackgroundColor(bgColor)
+                    outer.setTextColor(fgColor)
+                    outer.setCursorPos(width, 1)
+                    outer.write(scrollPos > 1 and "\30" or " ")
+                    outer.setCursorPos(width, height)
+                    outer.write(scrollPos < innerHeight - height and "\31" or " ")
+                end
+            end
+        end)
+        -- Make a function to allow external scrolling.
+        local function scroll(pos)
+            expect(1, pos, "number")
+            pos = math.floor(pos)
+            expect.range(pos, 1, innerHeight - height)
+            -- Scroll the window.
+            scrollPos = pos
+            inner.reposition(1, 2 - scrollPos)
+            -- Redraw scroll indicators if desired.
+            if showScrollIndicators then
+                outer.setBackgroundColor(bgColor)
+                outer.setTextColor(fgColor)
+                outer.setCursorPos(width, 1)
+                outer.write(scrollPos > 1 and "\30" or " ")
+                outer.setCursorPos(width, height)
+                outer.write(scrollPos < innerHeight - height and "\31" or " ")
+            end
+        end
+        return inner, scroll
+    end
+
     return PrimeUI
 end)()
 
@@ -631,14 +766,58 @@ local function dump(o)
     end
 end
 
--- Helper function to map over tables
-    function table.map(t, fn)
-        local result = {}
-        for k, v in pairs(t) do
-            result[k] = fn(v)
+local function writeWrappedText(window, text, startX, startY, width)
+    local function wrapText(str, lineWidth)
+        local lines = {}
+        local line = ""
+        local spaceLeft = lineWidth
+
+        for word in str:gmatch("%S+") do
+            if #word + 1 > spaceLeft then
+                -- Line is full, start new line
+                table.insert(lines, line)
+                line = word
+                spaceLeft = lineWidth - #word
+            else
+                -- Add word to line
+                if line ~= "" then
+                    line = line .. " " .. word
+                    spaceLeft = spaceLeft - (#word + 1)
+                else
+                    line = word
+                    spaceLeft = spaceLeft - #word
+                end
+            end
         end
-        return result
+
+        -- Add the last line if there's anything left
+        if line ~= "" then
+            table.insert(lines, line)
+        end
+
+        return lines
     end
+
+    local lines = wrapText(text, width)
+    local cy = startY
+
+    for _, line in ipairs(lines) do
+        window.setCursorPos(startX, cy)
+        window.write(line)
+        cy = cy + 1
+    end
+
+    return cy -- Return the next Y position
+end
+
+-- Helper function to map over tables
+function table.map(t, fn)
+    local result = {}
+    for k, v in pairs(t) do
+        result[k] = fn(v)
+    end
+    return result
+end
 
 local expect = require("cc.expect")
 local expect, field = expect.expect, expect.field
@@ -1353,6 +1532,28 @@ function Installer:showInstallProgramSelectorView(programs)
     end
 end
 
+function Installer:showConfirmInstallProgramView(program)
+    ui.clear()
+
+    -- Check core requirements
+    local coreOk, coreMessage = self:checkCoreRequirements(program)
+
+    local message = string.format("Program: %s v%s\nAuthor: %s\n\nCore Status: %s\n\nProceed with installation?",
+                                  program.title, program.version, program.author,
+                                  coreOk and "Ready" or "Needs core v" .. program.core.version)
+
+    ui.textBox(term.current(), self.boxSizing.mainPadding, 2, self.boxSizing.contentBox - 4, 8, message)
+
+    ui.button(term.current(), self.boxSizing.mainPadding, 13, "Install", "install")
+    ui.button(term.current(), self.boxSizing.mainPadding + 12, 13, "Cancel", "cancel")
+
+    self:drawBackButton()
+
+    local _, action = ui.run()
+
+    return action
+end
+
 function Installer:showCoreVersionSelectorView(_requiredVersion)
     self.log.debug("Showing core version selector")
     ui.clear()
@@ -1486,10 +1687,10 @@ function Installer:showManageProgramSelectorView()
         ui.textBox(term.current(), self.boxSizing.mainPadding, 2, self.boxSizing.contentBox, 3,
                    "No programs are currently installed.")
 
-        ui.button(term.current(), self.boxSizing.mainPadding, 6, "Back", "done")
+        ui.button(term.current(), self.boxSizing.mainPadding, 6, "Back", "back")
 
         ui.run()
-        return
+        return "back"
     end
 
     ui.textBox(term.current(), self.boxSizing.mainPadding, 2, self.boxSizing.contentBox, 3, "Installed Programs:")
@@ -1522,16 +1723,6 @@ function Installer:showManageProgramSelectorView()
 
     return action, selection
 
-    -- if action == "remove" and selection then
-    --     -- Remove program files
-    --     fs.delete(self.BASE_PATH .. "/programs/" .. selection)
-
-    --     -- Update config
-    --     config.installedPrograms[selection] = nil
-    --     self:saveConfig(config)
-
-    --     self:showCompleteView("Program removed")
-    -- end
 end
 
 function Installer:showManageProgramView(installedProgramName)
@@ -1554,127 +1745,197 @@ function Installer:showManageProgramView(installedProgramName)
             break
         end
     end
+
+    local term_width, _ = term.getSize()
+
     -- Display program information
     local title = string.format("%s (%s)", registryProgram and registryProgram.title or installedProgramName,
                                 installedProgramName)
     ui.textBox(term.current(), self.boxSizing.mainPadding, 2, self.boxSizing.contentBox, 3, title, colors.cyan)
 
-    local y = 6
-    local infoBox = ""
+    ui.horizontalLine(term.current(), self.boxSizing.mainPadding, 4, term_width - 1, colors.gray)
 
-    if registryProgram then
-        -- Compare versions
-        local updateAvailable = self.compareVersions(registryProgram.version, installedProgram.version) > 0
+    -- Back button at top right
+    -- ui.button(term.current(), self.boxSizing.borderBox - 4, 2, "Back", "back", colors.white, colors.gray)
+    self:drawBackButton()
 
-        infoBox = string.format([[
-Installed Version: %s
-Latest Version: %s%s
-Author: %s
-License: %s
+    -- Create scrollable area
+    local scrollArea, _ = ui.scrollBox(term.current(), self.boxSizing.mainPadding, 6, self.boxSizing.contentBox, 11,
+                                       20 + (registryProgram and #registryProgram.dependencies or 0), true, true,
+                                       colors.white, colors.black)
+    -- Draw content in scroll area
+    scrollArea.setBackgroundColor(colors.black)
+    scrollArea.clear()
 
-Description:
-%s
-
-Core Requirements:
-Version: %s
-Modules: %s
-
-Dependencies:
-%s
-]], installedProgram.version, registryProgram.version, updateAvailable and " (Update Available!)" or "",
-                                registryProgram.author, registryProgram.license,
-                                registryProgram.description or "No description available", registryProgram.core.version,
-                                table.concat(registryProgram.core.modules, ", "),
-                                #registryProgram.dependencies > 0 and
-                                    table.concat(table.map(registryProgram.dependencies, function(dep)
-                return string.format("- %s v%s", dep.name, dep.version)
-            end), "\n") or "None")
-    else
-        infoBox = string.format([[
-Installed Version: %s
-Installed At: %s
-
-Warning: Program not found in registry. Limited information available.
-]], installedProgram.version, os.date("%Y-%m-%d %H:%M", installedProgram.installedAt / 1000))
+    local function resetFg()
+        scrollArea.setTextColor(colors.white)
     end
 
-    ui.textBox(term.current(), self.boxSizing.mainPadding, y, self.boxSizing.contentBox, 12, infoBox)
-
-    -- Action buttons
-    y = y + 14
-    local buttonX = self.boxSizing.mainPadding
-
-    -- Back button (always shown)
-    ui.button(term.current(), buttonX, y, "Back", "back", colors.white, colors.gray)
-    buttonX = buttonX + 10
-
+    local cy = 1
     if registryProgram then
-        -- Update button (only if update available)
-        if self.compareVersions(registryProgram.version, installedProgram.version) > 0 then
-            ui.button(term.current(), buttonX, y, "Update", "update", colors.white, colors.green)
-            buttonX = buttonX + 10
-        end
+        local updateAvailable = self.compareVersions(registryProgram.version, installedProgram.version) > 0
 
-        -- Config button (if config.lua exists)
-        local hasConfig = false
-        for _, file in ipairs(registryProgram.files) do
-            if file.path:match("config%.lua$") then
-                hasConfig = true
+        scrollArea.setCursorPos(1, cy)
+        scrollArea.write("Installed Version: ")
+        scrollArea.setTextColor(updateAvailable and colors.lightGray or colors.green)
+        scrollArea.write(installedProgram.version)
+        resetFg()
+        cy = cy + 1
+
+        scrollArea.setCursorPos(1, cy)
+        scrollArea.write("Latest Version: ")
+        scrollArea.setTextColor(updateAvailable and colors.green or colors.white)
+        scrollArea.write(registryProgram.version)
+        if updateAvailable then
+            scrollArea.write(" (Update Available!)")
+        end
+        resetFg()
+        cy = cy + 2
+
+        -- Description
+        scrollArea.setTextColor(colors.yellow)
+        scrollArea.setCursorPos(1, cy)
+        scrollArea.write("Description:")
+        cy = cy + 1
+        scrollArea.setTextColor(colors.white)
+        scrollArea.setCursorPos(1, cy)
+        local description = registryProgram.description or "No description available"
+
+        -- Split into words and truncate
+        local words = {}
+        for word in description:gmatch("%S+") do
+            table.insert(words, word)
+            if #words >= 20 then
                 break
             end
         end
-        if hasConfig then
-            ui.button(term.current(), buttonX, y, "Edit Config", "config", colors.white, colors.blue)
-            buttonX = buttonX + 14
+
+        -- Add ellipsis if we truncated
+        local truncatedDesc = table.concat(words, " ")
+        if #words == 20 and description:match("%S+", truncatedDesc:len() + 1) then
+            truncatedDesc = truncatedDesc .. "..."
+        end
+        cy = writeWrappedText(scrollArea, truncatedDesc, 1, cy, self.boxSizing.contentBox - 4)
+        cy = cy + 1
+
+        -- Core Requirements
+        scrollArea.setTextColor(colors.orange)
+        scrollArea.setCursorPos(1, cy)
+        scrollArea.write("Core Requirements")
+        cy = cy + 1
+
+        scrollArea.setTextColor(colors.white)
+        scrollArea.setCursorPos(1, cy)
+        scrollArea.write("  Version: ")
+        scrollArea.setTextColor(colors.lightBlue)
+        scrollArea.write(registryProgram.core.version)
+        cy = cy + 1
+
+        scrollArea.setTextColor(colors.white)
+        scrollArea.setCursorPos(1, cy)
+        scrollArea.write("  Modules: ")
+        scrollArea.setTextColor(colors.lightBlue)
+        scrollArea.write(table.concat(registryProgram.core.modules, ", "))
+        cy = cy + 2
+
+        -- Dependencies
+        scrollArea.setTextColor(colors.orange)
+        scrollArea.setCursorPos(1, cy)
+        scrollArea.write("Dependencies")
+        cy = cy + 1
+
+        if #registryProgram.dependencies > 0 then
+            scrollArea.setTextColor(colors.lightBlue)
+            for _, dep in ipairs(registryProgram.dependencies) do
+                scrollArea.setCursorPos(1, cy)
+                scrollArea.write(string.format("  - %s v%s", dep.name, dep.version))
+                cy = cy + 1
+            end
+        else
+            scrollArea.setTextColor(colors.lightGray)
+            scrollArea.setCursorPos(1, cy)
+            scrollArea.write("None")
+            cy = cy + 1
+        end
+        cy = cy + 1
+
+        -- Install Date
+        scrollArea.setTextColor(colors.lightGray)
+        scrollArea.setCursorPos(1, cy)
+        local text = string.format("Installed on %s",
+                                   os.date("%A, %b %d, %Y at %R", installedProgram.installedAt / 1000))
+        cy = writeWrappedText(scrollArea, text, 1, cy, self.boxSizing.contentBox - 4)
+        cy = cy + 1
+    else
+        -- Not found in registry
+        scrollArea.setTextColor(colors.red)
+        scrollArea.setCursorPos(1, cy)
+        scrollArea.write("Warning: Program not found in registry")
+        cy = cy + 2
+
+        scrollArea.setTextColor(colors.white)
+        scrollArea.setCursorPos(1, cy)
+        scrollArea.write("Installed Version: ")
+        scrollArea.setTextColor(colors.yellow)
+        scrollArea.write(installedProgram.version)
+        cy = cy + 1
+
+        scrollArea.setTextColor(colors.white)
+        scrollArea.setCursorPos(1, cy)
+        scrollArea.write("Installed At: ")
+        scrollArea.setTextColor(colors.lightBlue)
+        scrollArea.write(os.date("%Y-%m-%d %H:%M", installedProgram.installedAt / 1000))
+        cy = cy + 2
+
+        scrollArea.setTextColor(colors.orange)
+        scrollArea.setCursorPos(1, cy)
+        scrollArea.write("Limited information is available for this program.")
+    end
+
+    -- Action buttons below scroll area
+    local buttonY = 18 -- Position below scroll area
+    local buttonX = self.boxSizing.mainPadding or 2 -- Initialize with fallback
+
+    ui.horizontalLine(term.current(), buttonX, buttonY - 1, term_width - 1, colors.gray)
+
+    if registryProgram then
+        if self.compareVersions(registryProgram.version, installedProgram.version) > 0 then
+            ui.button(term.current(), buttonX, buttonY, "Update", "update", colors.white, colors.green)
+            buttonX = buttonX + 10
         end
     end
 
-    -- Remove button (always shown, but with confirmation)
-    ui.button(term.current(), buttonX, y, "Remove", "remove", colors.white, colors.red)
+    ui.button(term.current(), buttonX, buttonY, "Uninstall", "remove", colors.white, colors.red)
 
     local _, action = ui.run()
 
     -- Handle actions
     if action == "update" then
         return self:handleProgramUpdate(installedProgramName, registryProgram)
-    elseif action == "config" then
-        return self:handleProgramConfig(installedProgramName)
     elseif action == "remove" then
-        -- Show confirmation dialog
         local result = self:showYesNoDialogView({
-            title = "Confirm Removal",
+            title = "Confirm Uninstall",
             message = string.format("Are you sure you want to remove %s?", title),
             color = colors.red
         })
         if result == "yes" then
+            --  Remove program files
+            fs.delete(self.BASE_PATH .. "/programs/" .. installedProgramName)
+
+            local config = self:loadConfig()
+
+            -- Update config
+            config.installedPrograms[installedProgramName] = nil
+            self:saveConfig(config)
+
+            self:showContinueDialogView({
+                title = "Success",
+                message = string.format("'%s' has been uninstalled.", installedProgramName),
+                color = colors.green
+            })
             return "remove"
         end
-        -- Return to program view if user cancels
-        return self:showManageProgramView(installedProgramName)
     end
-
-    return action
-
-end
-
-function Installer:confirmInstallProgramView(program)
-    ui.clear()
-
-    -- Check core requirements
-    local coreOk, coreMessage = self:checkCoreRequirements(program)
-
-    local message = string.format("Program: %s v%s\nAuthor: %s\n\nCore Status: %s\n\nProceed with installation?",
-                                  program.title, program.version, program.author,
-                                  coreOk and "Ready" or "Needs core v" .. program.core.version)
-
-    ui.textBox(term.current(), self.boxSizing.mainPadding, 2, self.boxSizing.contentBox - 4, 8, message)
-
-    ui.button(term.current(), self.boxSizing.mainPadding, 13, "Install", "install")
-    ui.button(term.current(), self.boxSizing.mainPadding + 12, 13, "Cancel", "cancel")
-
-    self:drawBackButton()
-
-    local _, action = ui.run()
 
     return action
 end
@@ -1706,7 +1967,7 @@ function Installer:run(config)
                     if selectedProgram then
                         local success = false
                         repeat
-                            local action = self:confirmInstallProgramView(selectedProgram)
+                            local action = self:showConfirmInstallProgramView(selectedProgram)
                             if action == "install" then
                                 self:installCore(selectedProgram.core.version, selectedProgram.core.modules)
                                 self:installProgram(selectedProgram)
