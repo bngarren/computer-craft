@@ -25,11 +25,22 @@
             ],
             "dependencies": [
                 {
-                    "type": "library",
                     "name": "telem",
-                    "version": "^0.8.0",
-                    "files": {
-                        "telem": "/common/telem"
+                    "version": "0.8.1",
+                    "source": {
+                        "type": "github-release",
+                        "owner": "cyberbit",
+                        "repo": "telem",
+                        "files": [
+                            {
+                                "source": "telem.min.lua",
+                                "target": "telem.lua"
+                            },
+                            {
+                                "source": "vendor.min.lua",
+                                "target": "vendor.lua"
+                            }
+                        ]
                     }
                 }
             ]
