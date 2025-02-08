@@ -751,6 +751,116 @@ local ui = (function()
     return PrimeUI
 end)()
 
+local Cache = {}
+
+-- when something with Cache as its metatable is missing a key, look inside Cache
+Cache.__index = Cache
+
+function Cache.new(defaultTTL)
+    local self = setmetatable({}, Cache)
+    self.store = {}
+    -- TTL is "time to live" or how long until stale
+    self.defaultTTL = defaultTTL or 60  -- Default TTL in seconds
+    self.events = {
+        hit = {},
+        miss = {},
+        set = {},
+        invalidate = {}
+    }
+    return self
+end
+
+-- Event handling
+function Cache:on(event, callback)
+    if self.events[event] then
+        table.insert(self.events[event], callback)
+        return true
+    end
+    return false
+end
+
+function Cache:emit(event, ...)
+    if self.events[event] then
+        for _, callback in ipairs(self.events[event]) do
+            callback(...)
+        end
+    end
+end
+
+-- Core cache methods
+function Cache:get(key)
+    local entry = self.store[key]
+    
+    if not entry then
+        self:emit("miss", key)
+        return nil
+    end
+
+    -- Check expiration
+    if entry.expires and os.epoch("utc") > entry.expires then
+        self.store[key] = nil
+        self:emit("invalidate", key, "expired")
+        return nil
+    end
+
+    entry.hits = entry.hits + 1
+    self:emit("hit", key, entry.hits)
+    return entry.value
+end
+
+function Cache:set(key, value, ttl)
+    local expires = nil
+    if ttl or self.defaultTTL then
+        expires = os.epoch("utc") + ((ttl or self.defaultTTL) * 1000)
+    end
+
+    self.store[key] = {
+        value = value,
+        expires = expires,
+        created = os.epoch("utc"),
+        hits = 0
+    }
+
+    self:emit("set", key, value)
+    return true
+end
+
+function Cache:invalidate(key)
+    if self.store[key] then
+        self.store[key] = nil
+        self:emit("invalidate", key, "manual")
+        return true
+    end
+    return false
+end
+
+function Cache:clear()
+    self.store = {}
+    self:emit("invalidate", "*", "clear")
+end
+
+-- Cache information and statistics
+function Cache:getStats()
+    local stats = {
+        entries = 0,
+        hits = 0,
+        expired = 0,
+        memory = 0  -- Rough approximation
+    }
+    
+    for key, entry in pairs(self.store) do
+        stats.entries = stats.entries + 1
+        stats.hits = stats.hits + entry.hits
+        if entry.expires and os.epoch("utc") > entry.expires then
+            stats.expired = stats.expired + 1
+        end
+        -- Rough memory estimation
+        stats.memory = stats.memory + #key + 100  -- 100 bytes overhead per entry (approximation)
+    end
+    
+    return stats
+end
+
 local function dump(o)
     if type(o) == 'table' then
         local s = '{ '
@@ -938,33 +1048,35 @@ function Installer:closeLogger()
     end
 end
 
-function Installer:httpGet(url, retries)
-    expect(1, url, "string")
-    expect(2, retries, "number", "nil")
+function Installer:initCache()
+    -- Initialize cache with 60 second TTL
+    self.cache = Cache.new(60)
 
-    retries = retries or 3
-    local attempt = 1
-
-    while attempt <= retries do
-        self.log.debug("HTTP GET %s (attempt %d/%d)", url, attempt, retries)
-
-        local success, response = pcall(http.get, url)
-        if success and response then
-            return response
-        end
-
-        self.log.warn("Request failed, retrying in %d seconds", attempt)
-        sleep(attempt)
-        attempt = attempt + 1
-    end
-
-    return nil, "Failed after " .. retries .. " attempts"
+    -- Add cache event handlers
+    self.cache:on("hit", function(key, hits) 
+        self.log.debug("Cache hit for '%s' (hits: %d)", key, hits)
+    end)
+    
+    self.cache:on("miss", function(key)
+        self.log.debug("Cache miss for '%s'", key)
+    end)
+    
+    self.cache:on("set", function(key)
+        self.log.debug("Cache set for '%s'", key)
+    end)
+    
+    self.cache:on("invalidate", function(key, reason)
+        self.log.debug("Cache invalidated for '%s' (%s)", key, reason)
+    end)
 end
+
 
 function Installer:init()
     self:initLogger()
 
     self.log.info("Initializing installer v%s", self.VERSION)
+
+    self:initCache()
 
     local termW, termH = term.getSize()
     self.boxSizing.contentBox = termW - self.boxSizing.mainPadding * 2 + 1
@@ -989,7 +1101,36 @@ function Installer:init()
     end
 end
 
+function Installer:httpGet(url, retries)
+    expect(1, url, "string")
+    expect(2, retries, "number", "nil")
+
+    retries = retries or 3
+    local attempt = 1
+
+    while attempt <= retries do
+        self.log.debug("HTTP GET %s (attempt %d/%d)", url, attempt, retries)
+
+        local success, response = pcall(http.get, url)
+        if success and response then
+            return response
+        end
+
+        self.log.warn("Request failed, retrying in %d seconds", attempt)
+        sleep(attempt)
+        attempt = attempt + 1
+    end
+
+    return nil, "Failed after " .. retries .. " attempts"
+end
+
 function Installer:loadConfig()
+    -- Try to get from cache first
+    local cached = self.cache:get("config")
+    if cached then
+        return cached
+    end
+
     local config = {
         installedPrograms = {},
         core = {
@@ -1023,6 +1164,9 @@ function Installer:loadConfig()
         self.log.warn("No .bng-config file exists yet...Initializing default at %s", self.CONFIG_PATH)
         self:saveConfig(config)
     end
+    -- Cache the config
+    self.cache:set("config", config)
+
     return config
 end
 
@@ -1032,6 +1176,12 @@ function Installer:saveConfig(config)
     local file = fs.open(self.CONFIG_PATH, "w")
     file.write(textutils.serializeJSON(config))
     file.close()
+
+    -- Invalidate the config cache since we just wrote new data
+    self.cache:invalidate("config")
+
+    -- Immediately update the cache with the new data
+    self.cache:set("config", config)
 end
 
 function Installer:getInstalledPrograms()
@@ -1046,6 +1196,13 @@ end
 --- Gets the registry.json file from the programs repo. This file lists the available programs and their version info, dependencies, etc.
 --- @return table|nil registry Lua table containing the registry data
 function Installer:fetchRegistry()
+    -- Try to get from cache first
+    local cached = self.cache:get("registry")
+    if cached then
+        return cached
+    end
+    
+    -- On cache miss, fetch from network
     local response = self:httpGet(self.PROGRAM_REGISTRY_URL)
     if not response then
         self.log.error("Failed to download registry")
@@ -1056,9 +1213,9 @@ function Installer:fetchRegistry()
     response.close()
 
     local registry = textutils.unserializeJSON(content)
-    if not registry then
-        self.log.error("Failed to parse registry JSON")
-        return nil
+    if registry then
+        -- Cache successful response
+        self.cache:set("registry", registry)
     end
 
     return registry
@@ -1554,7 +1711,7 @@ function Installer:installProgram(program)
     end
     
     fs.delete(tempPath)
-    
+
     return result
 end
 
