@@ -1,6 +1,8 @@
 local expect = require("cc.expect")
 local expect, field = expect.expect, expect.field
 
+local util = {}
+
 local ui = (function()
     -- PrimeUI by JackMacWindows
     -- Public domain/CC0
@@ -1898,12 +1900,12 @@ function Installer:showContinueDialogView(options, buttonText)
     return self:showDialog(dialogOptions)
 end
 
-function Installer:showErrorDialogView(message)
+function Installer:showErrorDialogView(message, ...)
     expect(1, message, "string")
 
     local dialogOptions = {
         title = "Error",
-        message = message,
+        message = string.format(message, ...),
         color = colors.red
     }
 
@@ -2484,7 +2486,7 @@ function Installer:showUpdateCommonView(libName)
 
     if not dep then
         self.log.error("Can't load %s info for showUpdateCommonView", libName)
-        self:showErrorDialogView("Unable to load info for " .. libName)
+        self:showErrorDialogView("Unable to load info for %s", libName)
         return nil
     end
 
@@ -2505,14 +2507,20 @@ function Installer:showUpdateCommonView(libName)
     local _, action, text = ui.run()
 
     if action == "result" and text and text ~= "" then
+
+        local trimmedInput = text:gsub("^v", "") -- remove "v" prefix if exists
+
+        -- Validate the text input to be a Semver version string
+        if not util.isValidSemver(trimmedInput) then
+            self:showErrorDialogView("'%s' is not a valid version input.", trimmedInput)
+            return nil
+        end
+
         -- handle version update
         local registry = self:fetchRegistry()
 
         if not registry then
-            self:showContinueDialogView({
-                title = "Error",
-                message = "Could not get registry.json"
-            })
+            self:showErrorDialogView("Could not get registry.json")
             return "back"
         end
 
@@ -2527,17 +2535,14 @@ function Installer:showUpdateCommonView(libName)
             end
         end
 
-        local newDepVersion = text:gsub("^v", "") -- remove "v" prefix if exists
+        local newDepVersion = trimmedInput
         regDep.version = newDepVersion
 
         local success = self:installDependency(regDep)
 
         if not success then
             if not registry then
-                self:showContinueDialogView({
-                    title = "Error",
-                    message = string.format("Failed to install %s (%s)", dep.name, newDepVersion)
-                })
+                self:showErrorDialogView(string.format("Failed to install %s (%s)", dep.name, newDepVersion))
                 return "back"
             end
         end
@@ -2674,6 +2679,35 @@ function Installer:run(config)
     -- Cleanup
     self:closeLogger()
 end
+
+function util.isValidSemver(version)
+    if not version or type(version) ~= "string" then return false end
+  
+  -- First try basic x.y.z format
+  local major, minor, patch = version:match("^(%d+)%.(%d+)%.(%d+)$")
+  
+  -- Check for partial versions
+  if not major then
+    major = version:match("^(%d+)$")
+    if major then return true end
+    
+    major, minor = version:match("^(%d+)%.(%d+)$")
+    if major and minor then return true end
+    return false
+  end
+  
+  -- For any version part that exists, check for leading zeros
+  if major:match("^0%d+") or 
+     minor:match("^0%d+") or 
+     patch:match("^0%d+") then
+    return false
+  end
+  
+  return true
+end
+
+-- **************************************
+-- Command line run
 
 local args = { ... }
 
