@@ -4,15 +4,9 @@
             "name": "base-energy-monitor",
             "title": "Base Energy Monitoring System",
             "description": "Advanced monitoring for energy storage",
-            "version": "0.0.1",
+            "version": "0.0.2",
             "author": "bngarren",
             "license": "MIT",
-            "core": {
-                "version": "0.0.5",
-                "modules": [
-                    "ppm", "util"
-                ]
-            },
             "files": [
                 {
                     "url": "https://raw.githubusercontent.com/bngarren/computer-craft/master/src/programs/energy-monitor-jan-2025/startup.lua",
@@ -28,6 +22,21 @@
                 }
             ],
             "dependencies": [
+                {
+                    "name": "bng-cc-core",
+                    "version": "0.0.10",
+                    "source": {
+                        "type": "github-release",
+                        "owner": "bngarren",
+                        "repo": "bng-cc-core",
+                        "files": [
+                            {
+                                "source": "bng-cc-core.min.lua",
+                                "target": "bng-cc-core.lua"
+                            }
+                        ]
+                    }
+                },
                 {
                     "name": "telem",
                     "version": "0.8.1",
