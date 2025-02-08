@@ -1,3 +1,6 @@
+local expect = require("cc.expect")
+local expect, field = expect.expect, expect.field
+
 local ui = (function()
     -- PrimeUI by JackMacWindows
     -- Public domain/CC0
@@ -861,6 +864,53 @@ function Cache:getStats()
     return stats
 end
 
+-- ** VERSION COMPARE ** --
+
+local VersionCompare = {}
+
+-- Pre-release identifiers ordered by precedence
+local PRE_RELEASE_ORDER = { ["alpha"] = 1, ["beta"] = 2, ["rc"] = 3 }
+
+function VersionCompare.parse(version)
+    expect(1, version, "string")
+    
+    local major, minor, patch, preRelease = version:match("^(%d+)%.?(%d*)%.?(%d*)%-?([%w]*)$")
+    if not major then return nil end
+    
+    return {
+        major = tonumber(major) or 0,
+        minor = tonumber(minor) or 0,
+        patch = tonumber(patch) or 0,
+        preRelease = preRelease ~= "" and preRelease or nil
+    }
+end
+
+--- Compares two version strings (semver) and returns the result in integer form
+---@param v1 string: version 1
+---@param v2 string: version 2
+---@return number|nil: Returns 1 if version 1 is newer, 0 if versions are equal, and -1 if version 1 is behind version 2. Returns nil if missing version.
+function VersionCompare.compare(v1, v2)
+    local p1, p2 = VersionCompare.parse(v1), VersionCompare.parse(v2)
+    if not p1 or not p2 then return nil end
+    
+    -- Compare major.minor.patch
+    local nums = {"major", "minor", "patch"}
+    for _, num in ipairs(nums) do
+        if p1[num] ~= p2[num] then
+            return p1[num] > p2[num] and 1 or -1
+        end
+    end
+    
+    -- If equal, compare pre-release
+    if p1.preRelease == p2.preRelease then return 0 end
+    if not p1.preRelease and p2.preRelease then return 1 end
+    if p1.preRelease and not p2.preRelease then return -1 end
+    
+    local pre1 = PRE_RELEASE_ORDER[p1.preRelease] or 0
+    local pre2 = PRE_RELEASE_ORDER[p2.preRelease] or 0
+    return pre1 == pre2 and 0 or (pre1 > pre2 and 1 or -1)
+end
+
 local function dump(o)
     if type(o) == 'table' then
         local s = '{ '
@@ -929,8 +979,7 @@ function table.map(t, fn)
     return result
 end
 
-local expect = require("cc.expect")
-local expect, field = expect.expect, expect.field
+
 
 local Installer = {
     VERSION = "1.0.0",
@@ -1334,25 +1383,7 @@ function Installer:checkCoreRequirements(program)
 end
 
 function Installer.compareVersions(v1, v2)
-    expect(1, v1, "string")
-    expect(2, v2, "string")
-
-    if v1 == "dev" or v2 == "dev" then
-        return 0
-    end
-
-    local function parseVersion(v)
-        local major, minor, patch = v:match("(%d+)%.(%d+)%.(%d+)")
-        return { tonumber(major) or 0, tonumber(minor) or 0, tonumber(patch) or 0 }
-    end
-
-    local parts1, parts2 = parseVersion(v1), parseVersion(v2)
-    for i = 1, 3 do
-        if parts1[i] ~= parts2[i] then
-            return parts1[i] > parts2[i] and 1 or -1
-        end
-    end
-    return 0
+    return VersionCompare.compare(v1, v2)
 end
 
 function Installer:constructCoreUrl(version)
@@ -1794,6 +1825,18 @@ function Installer:showContinueDialogView(options, buttonText)
     return self:showDialog(dialogOptions)
 end
 
+function Installer:showErrorDialogView(message)
+    expect(1, message, "string")
+
+    local dialogOptions = {
+        title = "Error",
+        message = message,
+        color = colors.red,
+    }
+
+    return self:showContinueDialogView(dialogOptions)
+end
+
 ---Shows a dialog with Yes/No buttons
 ---@return boolean:Returns "yes" or "no"
 function Installer:showYesNoDialogView(options)
@@ -2109,13 +2152,15 @@ function Installer:showManageProgramView(installedProgramName)
     local config = self:loadConfig()
     local installedProgram = config.installedPrograms[installedProgramName]
     if not installedProgram then
-        error("Couldn't find installed program")
+        self.log.error("Could not find installed program: %s", installedProgramName)
+        self:showErrorDialogView("Could not find installed program: " .. installedProgramName)
     end
 
     -- Get program info from registry
     local registry = self:fetchRegistry()
     if not registry then
-        self:showContinueDialogView({ title = "Error", message = "Could not get registry.json" })
+        self.log.error("Could not get registry.json")
+        self:showErrorDialogView("Could not get registry.json")
         return nil
     end
 
