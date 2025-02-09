@@ -1295,15 +1295,27 @@ end
 function Installer:saveConfig(config)
     expect(1, config, "table")
 
-    local file = fs.open(self.CONFIG_PATH, "w")
-    file.write(textutils.serializeJSON(config))
-    file.close()
+    local ok, err = pcall(function()
+        local file = fs.open(self.CONFIG_PATH, "w")
+        if not file then
+            error("Could not open config file for writing")
+        end
+        file.write(textutils.serializeJSON(config))
+        file.close()
+        return true
+    end)
 
-    -- Invalidate the config cache since we just wrote new data
-    self.cache:invalidate("config")
+    if ok then
+        -- Invalidate the config cache since we just wrote new data
+        self.cache:invalidate("config")
 
-    -- Immediately update the cache with the new data
-    self.cache:set("config", config)
+        -- Immediately update the cache with the new data
+        self.cache:set("config", config)
+        return true
+    else
+        self.log.error("Failed to save config: %s", err)
+        return false, err
+    end
 end
 
 function Installer:getInstalledPrograms()
@@ -1401,118 +1413,11 @@ function Installer:getInstalledCoreModules()
     return installedModules
 end
 
-function Installer:checkCoreRequirements(program)
-    self.log.debug("Checking core requirements for %s", program.name)
-
-    expect(1, program, "table")
-
-    -- Check if core is installed at correct version
-    local config = self:loadConfig()
-    local requiredVersion = program.core.version
-    local requiredModules = program.core.modules
-
-    -- If dev version is installed, consider it compatible with everything
-    if config.core.version == "dev" then
-        self.log.debug("Dev version installed, considering compatible")
-    else
-        -- Else do a Version check
-        if not config.core.version or self.compareVersions(config.core.version, requiredVersion) ~= 0 then
-            local message = string.format("Core library v%s required (current: %s)", requiredVersion,
-                                          config.core.version or "none")
-            self.log.info(message)
-            return false, message
-        end
-    end
-
-    -- Get installed modules by scanning directory
-    local installedModules = self:getInstalledCoreModules()
-
-    local missingModules = {}
-
-    for _, module in ipairs(requiredModules) do
-        local found = false
-        for _, installedModule in ipairs(installedModules) do
-            if module == installedModule then
-                found = true
-                break
-            end
-        end
-        if not found then
-            table.insert(missingModules, module)
-        end
-    end
-
-    if #missingModules > 0 then
-        local message = "Missing core module(s): "
-        for _, m in ipairs(missingModules) do
-            message = message .. "[" .. m .. "] "
-        end
-        self.log.info(message)
-        return false, message
-    end
-
-    self.log.debug("All core requirements met")
-    return true
-end
 
 function Installer.compareVersions(v1, v2)
     return VersionCompare.compare(v1, v2)
 end
 
-function Installer:constructCoreUrl(version)
-    expect(1, version, "string")
-
-    if version == "dev" then
-        return "https://raw.githubusercontent.com/bngarren/bng-cc-core/dev/src"
-    else
-        return string.format("https://raw.githubusercontent.com/bngarren/bng-cc-core/refs/tags/v%s/src", version)
-    end
-end
-
---- When updating/installing bng-cc-core, we need to know the minimum required version of the core library to satisfy the programs currently installed on the machine, including any program about to be installed (which is why we allow passing additional_versions parameters)
----@param ... string: Additional versions to include in the comparisons
----@return string|nil: The minimum version (most recent semver) or nil if comparison cannot be performed
-function Installer:getMinimumCoreVersion(...)
-    local additional_versions = {...}
-
-    local installedPrograms = self:getInstalledPrograms()
-    if #installedPrograms < 1 and #additional_versions < 1 then
-        self.log.warn(
-            "Cannot get minimum core version when no programs are installed and there are no additional versions to test")
-        return nil
-    end
-
-    local registry = self:fetchRegistry()
-    if not registry or #registry.programs == 0 then
-        return nil
-    end
-
-    local minCoreVersion
-    for _, programName in ipairs(installedPrograms) do
-        for _, registryProgram in ipairs(registry.programs) do
-            if registryProgram.name == programName then
-                local version = registryProgram.core.version
-                self.log.debug("%s requires bng-cc-core v%s", programName, version)
-
-                if not minCoreVersion or self.compareVersions(version, minCoreVersion) >= 0 then
-                    minCoreVersion = version
-                    self.log.debug("Minimum core version updated to v%s", minCoreVersion)
-                end
-                break
-            end
-        end
-    end
-
-    -- test the additional_versions
-    for _, add_version in ipairs(additional_versions) do
-        if not minCoreVersion or self.compareVersions(add_version, minCoreVersion) then
-            minCoreVersion = add_version
-            self.log.debug("Minimum core version updated to v%s (due to additional tested version)", minCoreVersion)
-        end
-    end
-
-    return minCoreVersion
-end
 
 function Installer:getTempPath()
     -- Create a unique temp directory for this operation
@@ -1678,96 +1583,173 @@ end
 function Installer:installProgram(program)
     expect(1, program, "table")
 
+    self.log.info("Starting installation of %s v%s", program.name, program.version)
+
+    -- Create unique temp path for this installation
+    local tempPath = self:getTempPath()
+    local tempProgramPath = fs.combine(tempPath, program.name)
+    local finalProgramPath = fs.combine(self.PROGRAMS_PATH, program.name)
+
+    -- Save original config for rollback
+    local originalConfig = self:loadConfig()
+
+    -- Setup progress UI
     local currentTerm = term.current()
     local progress = ui.progressBar(currentTerm, self.boxSizing.mainPadding, 8, self.boxSizing.contentBox, nil, nil,
                                     true)
     local statusBox = ui.textBox(currentTerm, self.boxSizing.mainPadding, 6, self.boxSizing.contentBox, 1, "")
 
-    local tempPath = self:getTempPath()
-    local tempProgramPath = fs.combine(tempPath, program.name)
-    local finalProgramPath = self.BASE_PATH .. "/programs/" .. program.name
+    -- Calculate total steps for progress
+    local totalSteps = (#program.files or 0) + (#program.dependencies or 0)
+    local currentStep = 0
 
-    local ok, result = pcall(function()
-        -- Calculate total steps
-        local currentStep = 0
-        local totalSteps = (#program.files or 0) + (#program.dependencies or 0)
+    local function updateProgress(step, increment)
+        currentStep = step or (currentStep + (increment or 0))
+        progress(currentStep / totalSteps)
+    end
 
-        -- First handle dependencies
-        if program.dependencies then
+    local function rollback(originalConfig, tempPath)
+        self.log.warn("Rolling back installation")
+
+        -- Cleanup temp files
+        if fs.exists(tempPath) then
+            self.log.debug("Removing temporary files at: %s", tempPath)
+            fs.delete(tempPath)
+        end
+
+        -- Only rollback config if it differs from original
+        local currentConfig = self:loadConfig()
+        if textutils.serialize(currentConfig) ~= textutils.serialize(originalConfig) then
+            self.log.debug("Rolling back configuration changes")
+            local success = self:saveConfig(originalConfig)
+            if not success then
+                self.log.error("Config rollback failed - system may be in inconsistent state")
+            end
+        end
+    end
+
+    -- Installation transaction stages
+    local ok, err = pcall(function()
+        -- STAGE 1: Install Dependencies
+        if program.dependencies and #program.dependencies > 0 then
+            self.log.debug("Stage 1: Installing %d dependencies", #program.dependencies)
+            statusBox("Installing dependencies...")
+
             for _, dep in ipairs(program.dependencies) do
-                statusBox("Installing dependency: " .. dep.name)
+                statusBox(string.format("Installing dependency: %s v%s", dep.name, dep.version))
+
                 local success = self:installDependency(dep, function(depProgress)
-                    local scaledProgress = (currentStep + depProgress) / totalSteps
-                    progress(scaledProgress)
+                    -- Scale the dependency progress within its step
+                    local scaledProgress = currentStep + depProgress
+                    progress(scaledProgress / totalSteps)
                 end)
 
                 if not success then
-                    error(string.format("Failed to install dependency: %s", dep.name))
+                    error(string.format("Failed to install dependency: %s v%s", dep.name, dep.version))
                 end
-                currentStep = currentStep + 1
-                progress(currentStep / totalSteps)
+
+                updateProgress(nil, 1)
             end
         end
 
-        -- Create temporary program directory
+        -- STAGE 2: Download Program Files
+        self.log.debug("Stage 2: Downloading program files")
+        statusBox("Downloading program files...")
+
+        -- Ensure temp directory exists
         fs.makeDir(tempProgramPath)
 
-        -- Install program files
+        -- Download all files
         for _, file in ipairs(program.files) do
-            statusBox("Installing: " .. file.path)
-            -- Ensure target directory exists
-            fs.makeDir(fs.getDir(fs.combine(tempProgramPath, file.path)))
+            statusBox(string.format("Downloading: %s", file.path))
 
-            local success = self:downloadFile(file.url, fs.combine(tempProgramPath, file.path))
+            -- Ensure target directory exists
+            local targetPath = fs.combine(tempProgramPath, file.path)
+            fs.makeDir(fs.getDir(targetPath))
+
+            local success = self:downloadFile(file.url, targetPath)
             if not success then
-                error(string.format("Failed to install file: %s", file.path))
+                error(string.format("Failed to download file: %s", file.path))
             end
-            currentStep = currentStep + 1
-            progress(currentStep / totalSteps)
+
+            updateProgress(nil, 1)
         end
 
-        -- Validate installation
-        local validationSuccess, validationError = self:validateInstallation(program, tempProgramPath)
-        if not validationSuccess then
+        -- STAGE 3: Validate Installation
+        self.log.debug("Stage 3: Validating installation")
+        statusBox("Validating installation...")
+
+        local valid, validationError = self:validateInstallation(program, tempProgramPath)
+        if not valid then
             error(string.format("Installation validation failed: %s", validationError))
         end
 
-        -- Move files to final location
+        -- STAGE 4: Update Config
+        self.log.debug("Stage 4: Updating configuration")
+        statusBox("Updating configuration...")
+
+        -- Prepare new config entry
+        local newConfig = textutils.unserialize(textutils.serialize(originalConfig)) -- Deep copy
+        newConfig.installedPrograms[program.name] = {
+            version = program.version,
+            installedAt = os.epoch("utc"),
+            dependencies = {}
+        }
+
+        -- Record dependency versions at time of installation
+        for _, dep in ipairs(program.dependencies or {}) do
+            newConfig.installedPrograms[program.name].dependencies[dep.name] = {
+                version = dep.version
+            }
+        end
+
+        -- Save new config
+        local configSuccess = self:saveConfig(newConfig)
+        if not configSuccess then
+            error("Failed to update configuration")
+        end
+
+        -- STAGE 5: Move Files to Final Location
+        self.log.debug("Stage 5: Moving program files to final location")
+        statusBox("Installing files...")
+
+        -- Remove existing installation if present
         if fs.exists(finalProgramPath) then
+            self.log.debug("Removing existing installation at: %s", finalProgramPath)
             fs.delete(finalProgramPath)
         end
-        fs.move(tempProgramPath, finalProgramPath)
 
-        return true
+        -- Move new files into place
+        local moveSuccess = pcall(function()
+            fs.move(tempProgramPath, finalProgramPath)
+        end)
+
+        if not moveSuccess then
+            error("Failed to move program files to final location")
+        end
+
     end)
 
-    if not ok then
-        self.log.error("Installation failed: %s", result)
-        return false, result
-    end
-
-    -- Save installation to config
-    local config = self:loadConfig()
-    config.installedPrograms[program.name] = {
-        version = program.version,
-        installedAt = os.epoch("utc"),
-        dependencies = {}
-    }
-    for _, dep in ipairs(program.dependencies or {}) do
-        config.installedPrograms[program.name].dependencies[dep.name] = {
-            version = dep.version
-        }
-    end
-    self:saveConfig(config)
-
+    -- CLEANUP
+    self.log.debug("Cleaning up temporary files")
     fs.delete(tempPath)
 
-    return result
+    -- Handle any errors during installation
+    if not ok then
+        self.log.error("Installation failed: %s", err)
+
+        rollback(originalConfig, tempPath)
+
+        return false, err
+    end
+
+    self.log.info("Successfully installed %s v%s", program.name, program.version)
+    return true
 end
 
 function Installer:validateInstallation(program, path)
     for _, file in ipairs(program.files) do
-        local filePath = fs.combine(path, file.path)
+        local filePath = fs.combine(path or self.PROGRAMS_PATH, file.path)
         if not fs.exists(filePath) then
             return false, "Missing file: " .. file.path
         end
@@ -1787,6 +1769,132 @@ function Installer:validateInstallation(program, path)
     end
 
     return true
+end
+
+function Installer:uninstallProgram(programName)
+    expect(1, programName, "string")
+
+    self.log.info("Starting uninstallation of %s", programName)
+
+    -- Save original config for rollback
+    local originalConfig = self:loadConfig()
+
+    -- Verify program exists before proceeding
+    if not originalConfig.installedPrograms[programName] then
+        return false, "Program is not installed"
+    end
+
+    local programPath = fs.combine(self.PROGRAMS_PATH, programName)
+
+    -- Verify program directory exists
+    if not fs.exists(programPath) then
+        self.log.warn("Program directory missing for %s", programName)
+        -- We should still remove from config if directory is missing
+    end
+
+    local ok, err = pcall(function()
+        -- 1. Remove program files
+        if fs.exists(programPath) then
+            self.log.debug("Removing program files at: %s", programPath)
+            fs.delete(programPath)
+        end
+
+        -- 2. Update config
+        local newConfig = textutils.unserialize(textutils.serialize(originalConfig)) -- Deep copy
+        newConfig.installedPrograms[programName] = nil
+
+        local success = self:saveConfig(newConfig)
+        if not success then
+            error("Failed to update configuration")
+        end
+
+        -- 3. Check for orphaned dependencies
+        local orphanedDeps = self:getOrphanDependencies()
+        if #orphanedDeps > 0 then
+            self.log.info("Found orphaned dependencies: %s", textutils.serialize(orphanedDeps))
+            -- Optionally ask user if they want to remove orphaned dependencies
+            local result = self:showYesNoDialogView({
+                title = "Orphan Dependencies",
+                message = string.format("Found %d dependencies no longer in use.\nWould you like to remove them?",
+                                        #orphanedDeps),
+                color = colors.yellow
+            })
+
+            if result == "yes" then
+                for _, dep in ipairs(orphanedDeps) do
+                    self.log.debug("Removing orphan dependency: %s", dep)
+                    local depPath = fs.combine(self.LIB_PATH, dep)
+                    if fs.exists(depPath) then
+                        fs.delete(depPath)
+                    end
+                    newConfig.installedLib[dep] = nil
+                end
+                self:saveConfig(newConfig)
+            end
+        end
+    end)
+
+    if not ok then
+        self.log.error("Uninstall failed: %s", err)
+
+        -- Attempt to restore config if it was modified
+        if textutils.serialize(self:loadConfig()) ~= textutils.serialize(originalConfig) then
+            self.log.warn("Rolling back configuration changes")
+            self:saveConfig(originalConfig)
+        end
+
+        local registry = self:fetchRegistry()
+        if not registry then
+            self.log.error("Could not get registry to validate installation")
+        end
+        local validInstallation = self:validateInstallation(registry.programs[programName])
+
+        if not validInstallation then
+            self:showErrorDialogView("Could not restore %s to previous state after failed uninstall. Possible corrupt state.", programName)
+        end
+
+        -- Attempt to restore program files if they were deleted
+        -- Note: This would require keeping a temp backup of the files before deletion
+        -- if we want to support this level of rollback
+
+        return false, err
+    end
+
+    self.log.info("Successfully uninstalled %s", programName)
+    return true
+end
+
+function Installer:getActiveDependencies()
+    local config = self:loadConfig()
+    local activeDeps = {}
+
+    for programName, program in pairs(config.installedPrograms) do
+        
+        for depName, _ in pairs(program.dependencies) do
+            activeDeps[depName] = true
+            self.log.debug("Marked %s as active", depName)
+        end
+    end
+    
+    self.log.debug("Final active dependencies: %s", textutils.serialize(activeDeps))
+    return activeDeps
+end
+
+function Installer:getOrphanDependencies()
+    local config = self:loadConfig()
+    local usedDeps = self:getActiveDependencies()
+    local orphanedDeps = {}
+
+    self.log.debug("Checking for orphaned dependencies:")
+    self.log.debug("Installed libs: %s", textutils.serialize(config.installedLib))
+    
+    -- Check each installed dependency
+    for depName, _ in pairs(config.installedLib) do
+        if not usedDeps[depName] then
+            table.insert(orphanedDeps, depName)
+        end
+    end
+    return orphanedDeps
 end
 
 function Installer:showDialog(options)
@@ -2296,7 +2404,9 @@ function Installer:showManageProgramView(installedProgramName)
 
                         scrollArea.setTextColor(warningColor)
                         cy = cy + 1
-                        cy = writeWrappedText(scrollArea, string.format("(installed program requires v%s)", requiredAtInstall), 2, cy,self.boxSizing.contentBox - 4)
+                        cy = writeWrappedText(scrollArea,
+                                              string.format("(installed program requires v%s)", requiredAtInstall), 2,
+                                              cy, self.boxSizing.contentBox - 4)
                     end
                 else
                     scrollArea.setTextColor(colors.red)
@@ -2382,20 +2492,24 @@ function Installer:showManageProgramView(installedProgramName)
             color = colors.red
         })
         if result == "yes" then
-            --  Remove program files
-            fs.delete(self.BASE_PATH .. "/programs/" .. installedProgramName)
+           
+            local success = self:uninstallProgram(installedProgramName)
 
-            local config = self:loadConfig()
+            if success then
+                self:showContinueDialogView({
+                    title = "Success",
+                    message = string.format("'%s' has been uninstalled.", installedProgramName),
+                    color = colors.green
+                })
+            else
+                self:showContinueDialogView({
+                    title = "Warning",
+                    message = string.format("'%s' was unable to be uninstalled.", installedProgramName),
+                    color = colors.yellow
+                })
+            end
 
-            -- Update config
-            config.installedPrograms[installedProgramName] = nil
-            self:saveConfig(config)
-
-            self:showContinueDialogView({
-                title = "Success",
-                message = string.format("'%s' has been uninstalled.", installedProgramName),
-                color = colors.green
-            })
+            
             return "remove"
         end
     end
