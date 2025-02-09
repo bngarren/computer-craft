@@ -8,8 +8,8 @@ local config = {
     threshold_high = 90,
     threshold_signal_side = "back",
     peripherals = {
-        ENERGY_STORAGE_MAIN = { side = "left", name = "Energy - Main" },
-        MONITOR = { side = "top", name = "Primary Monitor" },
+        ENERGY_STORAGE_MAIN = { side = "right", name = "Energy - Main" },
+        MONITOR = { side = "left", name = "Primary Monitor" },
     }
 }
 

@@ -1,33 +1,20 @@
 -- startup.lua
 -- Monitor an energy storage
 
+-- Load bng-cc-core and init the package env -- *Must come before any other lib requires*
 local core = require("/bng.lib.bng-cc-core.bng-cc-core")
 core.initenv.run()
 
+-- Load libs
 local ppm = core.ppm
 local util = core.util
 
+-- Program files
 local config = require("base-energy-monitor.config") 
 
 
 local coloredWrite = util.coloredWrite
 
-
-local args = {...}
-if #args > 0 and args[1] == "--version" then
-    local installManifestPath = shell.dir() .. "/install_manifest.json"
-    if fs.exists(installManifestPath) then
-        local file = fs.open(installManifestPath, "r")
-        local data = textutils.unserializeJSON(file.readAll())
-        file.close()
-        coloredWrite("Installed Program: " .. (data.program or "Unknown"), colors.white)
-        coloredWrite("Installed Version: " .. (data.version or "Unknown"), colors.lightBlue)
-        coloredWrite("Installation Date: " .. (data.date or "Unknown"), colors.lightGray)
-    else
-        coloredWrite("No installation manifest found.", colors.red)
-    end
-    return 0
-end
 
 -- Mount peripherals
 ppm.mount_all()
