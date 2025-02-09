@@ -1,4 +1,5 @@
-require("/bng.common.bng-cc-core.initenv").init_env()
+local core = require("/bng.lib.bng-cc-core.bng-cc-core")
+core.initenv.run()
 
 local telem = require("telem")
 

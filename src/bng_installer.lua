@@ -1585,6 +1585,14 @@ function Installer:installProgram(program)
 
     self.log.info("Starting installation of %s v%s", program.name, program.version)
 
+    -- Get url to install from
+    local registry = self:fetchRegistry()
+    local programsUrl = registry.programs_url
+
+    if not programsUrl or programsUrl == "" then
+        error("Could not get programs_url from registry")
+    end
+
     -- Create unique temp path for this installation
     local tempPath = self:getTempPath()
     local tempProgramPath = fs.combine(tempPath, program.name)
@@ -1667,7 +1675,7 @@ function Installer:installProgram(program)
             local targetPath = fs.combine(tempProgramPath, file.path)
             fs.makeDir(fs.getDir(targetPath))
 
-            local success = self:downloadFile(file.url, targetPath)
+            local success = self:downloadFile(programsUrl .. program.name .. "/" .. file.path, targetPath)
             if not success then
                 error(string.format("Failed to download file: %s", file.path))
             end
