@@ -5,7 +5,7 @@
             "name": "base-energy-monitor",
             "title": "Base Energy Monitoring System",
             "description": "Advanced monitoring for energy storage",
-            "version": "0.0.4",
+            "version": "0.0.5",
             "author": "bngarren",
             "license": "MIT",
             "files": [
@@ -22,7 +22,7 @@
             "dependencies": [
                 {
                     "name": "bng-cc-core",
-                    "version": "0.0.13",
+                    "version": "0.0.14",
                     "source": {
                         "type": "github-release",
                         "owner": "bngarren",
