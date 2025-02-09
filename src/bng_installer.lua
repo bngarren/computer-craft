@@ -7,7 +7,7 @@ local ui = (function()
     -- PrimeUI by JackMacWindows
     -- Public domain/CC0
 
-    local expect = require"cc.expect".expect
+    local expect = require "cc.expect".expect
 
     -- Initialization code
     local PrimeUI = {}
@@ -188,7 +188,7 @@ local ui = (function()
                     win.setTextColor(fgColor)
                     win.write(" " .. text .. " ")
                 elseif (event == "monitor_touch" and periphName == button and clickX >= screenX and clickX < screenX +
-                    #text + 2 and clickY == screenY) or (event == "mouse_up" and button == 1 and buttonDown) then
+                        #text + 2 and clickY == screenY) or (event == "mouse_up" and button == 1 and buttonDown) then
                     -- Finish a click event.
                     if clickX >= screenX and clickX < screenX + #text + 2 and clickY == screenY then
                         -- Trigger the action.
@@ -967,7 +967,7 @@ function VersionCompare.compare(v1, v2)
     end
 
     -- Compare major.minor.patch
-    local nums = {"major", "minor", "patch"}
+    local nums = { "major", "minor", "patch" }
     for _, num in ipairs(nums) do
         if p1[num] ~= p2[num] then
             return p1[num] > p2[num] and 1 or -1
@@ -1072,6 +1072,13 @@ local Installer = {
         ERROR = "ERROR"
     },
 
+    VIEW_RESULT = {
+        BACK = "VIEW_BACK",   -- Return to previous view
+        RETRY = "VIEW_RETRY", -- Re-render current view
+        NEXT = "VIEW_NEXT",   -- Proceed to next view
+        EXIT = "VIEW_EXIT"    -- Exit the program
+    },
+
     MAIN_MENU = {
         options = {
             INSTALL_PROGRAM = "INSTALL_PROGRAM",
@@ -1081,7 +1088,7 @@ local Installer = {
             EXIT = "EXIT"
         },
         -- Add an order array to maintain specific menu ordering
-        order = {"INSTALL_PROGRAM", "MANAGE_PROGRAMS", "UPDATE_LIB", "REMOVE_ALL", "EXIT"},
+        order = { "INSTALL_PROGRAM", "MANAGE_PROGRAMS", "UPDATE_LIB", "REMOVE_ALL", "EXIT" },
         display = {
             INSTALL_PROGRAM = {
                 text = "Install New Program",
@@ -1413,11 +1420,9 @@ function Installer:getInstalledCoreModules()
     return installedModules
 end
 
-
 function Installer.compareVersions(v1, v2)
     return VersionCompare.compare(v1, v2)
 end
-
 
 function Installer:getTempPath()
     -- Create a unique temp directory for this operation
@@ -1461,7 +1466,7 @@ function Installer:installDependency(dep, progressCallback)
 
         for i, file in ipairs(dep.source.files) do
             local url = string.format("https://github.com/%s/%s/releases/download/v%s/%s", dep.source.owner,
-                                      dep.source.repo, dep.version, file.source)
+                dep.source.repo, dep.version, file.source)
             local targetPath = fs.combine(tempDepPath, file.target)
 
             -- Ensure target directory exists
@@ -1491,25 +1496,25 @@ function Installer:installDependency(dep, progressCallback)
                     -- Same version - verify files and handle missing
                     if verifyFiles(finalDepPath) then
                         -- All files present - ask about overwrite
-                        local result = self:showYesNoDialogView({
+                        local _, selection = self:showView(self.yesNoDialogView, {
                             title = "Dependency Already Installed",
                             message = string.format("%s v%s is already installed.\nWould you like to reinstall it?",
-                                                    dep.name, dep.version)
+                                dep.name, dep.version)
                         })
-                        if result == "no" then
+                        if selection == "no" then
                             return true
                         end
                     end
                 else
                     -- Different version - warn about existing programs
-                    local result = self:showYesNoDialogView({
+                    local _, selection = self:showView(self.yesNoDialogView, {
                         title = "Version Conflict",
                         message = string.format("Warning: %s v%s is already installed but v%s is required.\n" ..
-                                                    "This may affect other installed programs.\n" ..
-                                                    "Continue with installation?", dep.name, installedDep.version,
-                                                dep.version)
+                            "This may affect other installed programs.\n" ..
+                            "Continue with installation?", dep.name, installedDep.version,
+                            dep.version)
                     })
-                    if result == "no" then
+                    if selection == "no" then
                         return false
                     end
                 end
@@ -1518,13 +1523,13 @@ function Installer:installDependency(dep, progressCallback)
                 local files = fs.list(finalDepPath)
                 local fileCount = #files
 
-                local result = self:showYesNoDialogView({
+                local _, selection = self:showView(self.yesNoDialogView, {
                     title = "Untracked Installation",
                     message = string.format("Found untracked installation of %s (%d files).\n" ..
-                                                "Would you like to overwrite it with v%s?", dep.name, fileCount,
-                                            dep.version)
+                        "Would you like to overwrite it with v%s?", dep.name, fileCount,
+                        dep.version)
                 })
-                if result == "no" then
+                if selection == "no" then
                     return false
                 end
             end
@@ -1604,7 +1609,7 @@ function Installer:installProgram(program)
     -- Setup progress UI
     local currentTerm = term.current()
     local progress = ui.progressBar(currentTerm, self.boxSizing.mainPadding, 8, self.boxSizing.contentBox, nil, nil,
-                                    true)
+        true)
     local statusBox = ui.textBox(currentTerm, self.boxSizing.mainPadding, 6, self.boxSizing.contentBox, 1, "")
 
     -- Calculate total steps for progress
@@ -1735,7 +1740,6 @@ function Installer:installProgram(program)
         if not moveSuccess then
             error("Failed to move program files to final location")
         end
-
     end)
 
     -- CLEANUP
@@ -1772,7 +1776,7 @@ function Installer:validateInstallation(program, path)
         end
         if self.compareVersions(installedDep.version, dep.version) < 0 then
             return false, string.format("Dependency %s version %s is incompatible (need %s)", dep.name,
-                                        installedDep.version, dep.version)
+                installedDep.version, dep.version)
         end
     end
 
@@ -1821,14 +1825,14 @@ function Installer:uninstallProgram(programName)
         if #orphanedDeps > 0 then
             self.log.info("Found orphaned dependencies: %s", textutils.serialize(orphanedDeps))
             -- Optionally ask user if they want to remove orphaned dependencies
-            local result = self:showYesNoDialogView({
+            local _, selection = self:showView(self.yesNoDialogView, {
                 title = "Orphan Dependencies",
                 message = string.format("Found %d dependencies no longer in use.\nWould you like to remove them?",
-                                        #orphanedDeps),
+                    #orphanedDeps),
                 color = colors.yellow
             })
 
-            if result == "yes" then
+            if selection == "yes" then
                 for _, dep in ipairs(orphanedDeps) do
                     self.log.debug("Removing orphan dependency: %s", dep)
                     local depPath = fs.combine(self.LIB_PATH, dep)
@@ -1854,11 +1858,13 @@ function Installer:uninstallProgram(programName)
         local registry = self:fetchRegistry()
         if not registry then
             self.log.error("Could not get registry to validate installation")
-        end
-        local validInstallation = self:validateInstallation(registry.programs[programName])
+        else
+            local validInstallation = self:validateInstallation(registry.programs[programName])
 
-        if not validInstallation then
-            self:showErrorDialogView("Could not restore %s to previous state after failed uninstall. Possible corrupt state.", programName)
+            if not validInstallation then
+                self:showErrorDialogView(
+                    "Could not restore %s to previous state after failed uninstall. Possible corrupt state.", programName)
+            end
         end
 
         -- Attempt to restore program files if they were deleted
@@ -1877,13 +1883,12 @@ function Installer:getActiveDependencies()
     local activeDeps = {}
 
     for programName, program in pairs(config.installedPrograms) do
-        
         for depName, _ in pairs(program.dependencies) do
             activeDeps[depName] = true
             self.log.debug("Marked %s as active", depName)
         end
     end
-    
+
     self.log.debug("Final active dependencies: %s", textutils.serialize(activeDeps))
     return activeDeps
 end
@@ -1895,7 +1900,7 @@ function Installer:getOrphanDependencies()
 
     self.log.debug("Checking for orphaned dependencies:")
     self.log.debug("Installed libs: %s", textutils.serialize(config.installedLib))
-    
+
     -- Check each installed dependency
     for depName, _ in pairs(config.installedLib) do
         if not usedDeps[depName] then
@@ -1923,7 +1928,7 @@ function Installer:showDialog(options)
     -- draw title
     currentY = currentY + 1
     ui.textBox(term.current(), self.boxSizing.mainPadding + 1, currentY, width, 3, options.title or "Message",
-               options.color or colors.lightGray)
+        options.color or colors.lightGray)
     -- draw separator
     currentY = currentY + 1
     ui.horizontalLine(term.current(), self.boxSizing.mainPadding + 1, currentY, width, options.color or colors.lightGray)
@@ -1935,11 +1940,11 @@ function Installer:showDialog(options)
     local buttonSpacing = math.floor(width / #options.buttons)
     for i, button in ipairs(options.buttons) do
         ui.button(term.current(), self.boxSizing.mainPadding + (i - 1) * buttonSpacing + 4, currentY, button.text,
-                  button.action, button.color or colors.lightGray)
+            button.action, button.color or colors.lightGray)
     end
 
     local _, action = ui.run()
-    return action
+    return self.VIEW_RESULT.NEXT, action
 end
 
 function Installer:showContinueDialogView(options, buttonText)
@@ -1951,13 +1956,15 @@ function Installer:showContinueDialogView(options, buttonText)
         message = field(options, "message", "string"),
         color = field(options, "color", "number", "nil") or colors.white,
         height = field(options, "height", "number", "nil") or 12,
-        buttons = {{
+        buttons = { {
             text = buttonText or "Continue",
             action = "continue"
-        }}
+        } }
     }
 
-    return self:showDialog(dialogOptions)
+    local result, selection = self:showView(self.showDialog, dialogOptions)
+
+    return result, selection
 end
 
 function Installer:showErrorDialogView(message, ...)
@@ -1973,8 +1980,8 @@ function Installer:showErrorDialogView(message, ...)
 end
 
 ---Shows a dialog with Yes/No buttons
----@return boolean:Returns "yes" or "no"
-function Installer:showYesNoDialogView(options)
+---@return string,string|nil: Returns 'yes' or 'no'
+function Installer:yesNoDialogView(options)
     expect(1, options, "table")
 
     local dialogOptions = {
@@ -1982,7 +1989,7 @@ function Installer:showYesNoDialogView(options)
         message = field(options, "message", "string"),
         color = field(options, "color", "number", "nil") or colors.yellow,
         height = field(options, "height", "number", "nil") or 12,
-        buttons = {{
+        buttons = { {
             text = "Yes",
             action = "yes",
             color = colors.green
@@ -1990,10 +1997,12 @@ function Installer:showYesNoDialogView(options)
             text = "No",
             action = "no",
             color = colors.red
-        }}
+        } }
     }
 
-    return self:showDialog(dialogOptions)
+    local result, selection = self:showView(self.showDialog, dialogOptions)
+
+    return result, selection
 end
 
 function Installer:drawBackButton()
@@ -2007,11 +2016,34 @@ function Installer:drawBackButton()
     ui.button(term.current(), buttonX, buttonY, "Back", "back", colors.white, colors.gray)
 end
 
-function Installer:showMainMenuView()
-    ui.clear()
+function Installer:showView(viewFunc, ...)
+    local result
+    repeat
+        -- Clear screen before each view render
+        ui.clear()
 
+        -- Call the function with self as first arg
+        result = { viewFunc(self, ...) }
+
+        -- Handle standard view results
+        if result[1] == self.VIEW_RESULT.RETRY then
+            -- Continue loop to retry view
+        elseif result[1] == self.VIEW_RESULT.BACK then
+            -- Return back to previous view
+            return self.VIEW_RESULT.BACK
+        elseif result[1] == self.VIEW_RESULT.EXIT then
+            -- Exit program
+            return self.VIEW_RESULT.EXIT
+        end
+    until result[1] ~= self.VIEW_RESULT.RETRY
+
+    -- Return all results for non-standard cases
+    return table.unpack(result)
+end
+
+function Installer:mainMenuView()
     ui.textBox(term.current(), self.boxSizing.mainPadding, 2, self.boxSizing.contentBox, 3,
-               "BNG Installer v" .. self.VERSION, colors.cyan)
+        "BNG Installer v" .. self.VERSION, colors.cyan)
 
     ui.textBox(term.current(), self.boxSizing.mainPadding, 4, self.boxSizing.contentBox, 3, "Select an option:")
 
@@ -2029,28 +2061,36 @@ function Installer:showMainMenuView()
     ui.borderBox(term.current(), self.boxSizing.mainPadding + 1, 6, self.boxSizing.borderBox, 8)
 
     local descriptionBox = ui.textBox(term.current(), self.boxSizing.mainPadding, 15, self.boxSizing.contentBox, 3,
-                                      descriptions[1])
+        descriptions[1])
 
     ui.selectionBox(term.current(), self.boxSizing.mainPadding + 1, 6, self.boxSizing.contentBox, 8, display_text,
-                    "done", function(opt)
-        descriptionBox(descriptions[opt])
-    end)
+        "done", function(opt)
+            descriptionBox(descriptions[opt])
+        end)
 
-    local action_type, _, selected_text = ui.run()
+    local _, action, selected_text = ui.run()
 
     local selected_id = text_to_id[selected_text]
     self.log.debug("Main menu selection: %s", selected_id)
 
-    return action_type, _, selected_id
+    if not selected_id then
+        return self.VIEW_RESULT.RETRY
+    end
+
+    -- Return the selected menu option for further processing
+    return self.VIEW_RESULT.NEXT, selected_id
 end
 
-function Installer:showInstallProgramSelectorView(programs)
-    expect(1, programs, "table")
-
-    ui.clear()
+function Installer:installProgramSelectorView()
+    local registry = self:fetchRegistry()
+    if not registry then
+        self:showErrorDialogView("Could not get registry")
+        return self.VIEW_RESULT.BACK
+    end
+    local programs = registry.programs
 
     ui.textBox(term.current(), self.boxSizing.mainPadding, 2, self.boxSizing.contentBox, 3,
-               "Select a program to install:")
+        "Select a program to install:")
 
     self:drawBackButton()
 
@@ -2068,17 +2108,21 @@ function Installer:showInstallProgramSelectorView(programs)
     ui.borderBox(term.current(), self.boxSizing.mainPadding + 1, 6, self.boxSizing.borderBox, 8)
 
     local descriptionBox = ui.textBox(term.current(), self.boxSizing.mainPadding, 15, self.boxSizing.contentBox, 5,
-                                      descriptions[1])
+        descriptions[1])
 
     ui.selectionBox(term.current(), self.boxSizing.mainPadding + 1, 6, self.boxSizing.contentBox, 8, entries, "done",
-                    function(opt)
-        descriptionBox(descriptions[opt])
-    end)
+        function(opt)
+            descriptionBox(descriptions[opt])
+        end)
 
     local _, action, selection = ui.run()
 
     if action == "back" then
-        return nil
+        return self.VIEW_RESULT.BACK
+    end
+
+    if not selection then
+        return self.VIEW_RESULT.RETRY
     end
 
     -- Extract program name from selection and return program
@@ -2086,17 +2130,16 @@ function Installer:showInstallProgramSelectorView(programs)
         for _, program in ipairs(programs) do
             if selection:find(program.title, 1, true) then
                 self.log.debug("Selected " .. program.name .. "\n" .. dump(program))
-                return program
+                return self.VIEW_RESULT.NEXT, program
             end
         end
     end
+    return self.VIEW_RESULT.RETRY
 end
 
-function Installer:showConfirmInstallProgramView(program)
-    ui.clear()
-
+function Installer:confirmInstallProgramView(program)
     local message = string.format("Program: %s v%s\nAuthor: %s\n\nProceed with installation?", program.title,
-                                  program.version, program.author)
+        program.version, program.author)
 
     ui.textBox(term.current(), self.boxSizing.mainPadding, 2, self.boxSizing.contentBox - 4, 8, message)
 
@@ -2107,146 +2150,29 @@ function Installer:showConfirmInstallProgramView(program)
 
     local _, action = ui.run()
 
-    return action
+    if action == "back" or action == "cancel" then
+        return self.VIEW_RESULT.BACK
+    end
+
+    return self.VIEW_RESULT.NEXT
 end
 
-function Installer:showCoreVersionSelectorView(_requiredVersion)
-    self.log.debug("Showing core version selector")
-    ui.clear()
-
-    -- Fetch latest releases
-    local coreReleases = {}
-    local response = self:httpGet("https://api.github.com/repos/bngarren/bng-cc-core/releases")
-    if response then
-        local apiResult = textutils.unserializeJSON(response.readAll())
-        if apiResult then
-            for index, value in ipairs(apiResult) do
-                if index > 3 then
-                    break
-                end
-                table.insert(coreReleases, {
-                    tag = value.tag_name,
-                    url = value.html_url
-                })
-            end
-            self.log.info("Retrieved latest releases:\n%s", dump(coreReleases))
-        end
-    end
-
-    local currentVersion = self:loadConfig().core.version or "none"
-    local requiredVersion = self:getMinimumCoreVersion(_requiredVersion)
-    local options = {}
-    local descriptions = {}
-
-    -- Add latest 3 releases
-    for i, release in ipairs(coreReleases) do
-        local isRequired = requiredVersion and release.tag:sub(2) == requiredVersion
-        local option = release.tag .. (isRequired and " (required)" or "")
-        table.insert(options, option)
-        table.insert(descriptions,
-                     string.format(
-                         "Install core %s%s.\nThis version will be downloaded from the corresponding GitHub release.",
-                         release.tag, isRequired and " - *required by local program(s)" or ""))
-    end
-
-    -- Add required version if not in latest 3 and exists
-    if requiredVersion then
-        local requiredFound = false
-        for _, opt in ipairs(options) do
-            if opt:match("^v" .. requiredVersion) then
-                requiredFound = true
-                break
-            end
-        end
-
-        if not requiredFound then
-            table.insert(options, "v" .. requiredVersion .. " (required)")
-            table.insert(descriptions, string.format(
-                             "Install core v%s - this is the version required by local program(s).\nThis version will be downloaded from the corresponding GitHub release.",
-                             requiredVersion))
-        end
-    end
-
-    -- Add dev branch option
-    table.insert(options, "Development Branch (latest)")
-    table.insert(descriptions,
-                 "Install the latest code from the dev branch.\nWarning: This version may be unstable but will have the latest features and fixes.")
-
-    ui.textBox(term.current(), self.boxSizing.mainPadding, 2, self.boxSizing.contentBox, 3,
-               string.format("Select bng-cc-core Version\nCurrent: %s\nRequired: %s", currentVersion, requiredVersion))
-
-    ui.borderBox(term.current(), self.boxSizing.mainPadding + 1, 6, self.boxSizing.borderBox, 8)
-    local descriptionBox = ui.textBox(term.current(), self.boxSizing.mainPadding, 15, self.boxSizing.contentBox, 5,
-                                      descriptions[1])
-
-    self:drawBackButton()
-
-    ui.selectionBox(term.current(), self.boxSizing.mainPadding + 1, 6, self.boxSizing.contentBox, 8, options, "done",
-                    function(opt)
-        descriptionBox(descriptions[opt])
-    end)
-
-    local _, action, selection = ui.run()
-
-    if action == "back" then
-        return nil
-    end
-
-    local selectedVersion
-    if selection:match("Development Branch") then
-        selectedVersion = "dev"
-    else
-        selectedVersion = selection:match("^v(.+)%s?"):gsub("%s.*$", "")
-    end
-
-    -- Handle version installation confirmation
-    if selectedVersion == currentVersion then
-        local action = self:showYesNoDialogView({
-            title = "Alert",
-            message = string.format("bng-cc-core (%s) is already installed.\nReinstall?", selectedVersion)
-        })
-        if action == "no" then
-            return nil
-        end
-    else
-        local action = self:showYesNoDialogView({
-            title = "Confirm",
-            message = string.format("This will install bng-cc-core (%s).\nContinue?", selectedVersion),
-            color = colors.green
-        })
-        if action == "no" then
-            return nil
-        end
-    end
-
-    self.log.info("Selected core version: %s", selectedVersion)
-    return selectedVersion
-end
-
-function Installer:showCompleteView(name)
-    ui.clear()
-
-    ui.textBox(term.current(), self.boxSizing.mainPadding, 2, self.boxSizing.contentBox, 3,
-               name .. " has been installed successfully!")
-
-    ui.button(term.current(), self.boxSizing.mainPadding, 6, "Continue", "done")
-
-    ui.run()
-end
-
-function Installer:showManageProgramSelectorView()
-    ui.clear()
-
+function Installer:manageProgramSelectorView()
     local config = self:loadConfig()
 
+    -- No programs installed
     if not next(config.installedPrograms) then
         ui.textBox(term.current(), self.boxSizing.mainPadding, 2, self.boxSizing.contentBox, 3,
-                   "No programs are currently installed.")
+            "No programs are currently installed.")
 
         ui.button(term.current(), self.boxSizing.mainPadding, 6, "Back", "back")
 
-        ui.run()
-        return "back"
+        local _, action = ui.run()
+
+        if action == "back" then
+            return self.VIEW_RESULT.BACK
+        end
+        return self.VIEW_RESULT.RETRY
     end
 
     ui.textBox(term.current(), self.boxSizing.mainPadding, 2, self.boxSizing.contentBox, 3, "Installed Programs:")
@@ -2258,29 +2184,37 @@ function Installer:showManageProgramSelectorView()
     for name, info in pairs(config.installedPrograms) do
         table.insert(entries, name)
         table.insert(descriptions, string.format("Version: %s\nInstalled: %s", info.version,
-                                                 os.date("%Y-%m-%d %H:%M", info.installedAt / 1000)))
+            os.date("%Y-%m-%d %H:%M", info.installedAt / 1000)))
     end
 
     ui.borderBox(term.current(), self.boxSizing.mainPadding + 1, 6, self.boxSizing.borderBox, 8)
 
     local descriptionBox = ui.textBox(term.current(), self.boxSizing.mainPadding, 15, self.boxSizing.contentBox, 3,
-                                      descriptions[1])
+        descriptions[1])
 
     ui.selectionBox(term.current(), self.boxSizing.mainPadding + 1, 6, self.boxSizing.contentBox, 8, entries, "done",
-                    function(opt)
-        descriptionBox(descriptions[opt])
-    end)
+        function(opt)
+            descriptionBox(descriptions[opt])
+        end)
 
     self:drawBackButton()
 
     local _, action, selection = ui.run()
 
-    self.log.debug("Selected %s to manage program", selection)
+    if action == "back" then
+        return self.VIEW_RESULT.BACK
+    end
 
-    return action, selection
+    if action == "done" and selection then
+        self.log.debug("Selected %s to manage program", selection)
+        return self.VIEW_RESULT.NEXT, selection
+    end
+
+    -- If we get here, no valid selection was made
+    return self.VIEW_RESULT.RETRY
 end
 
-function Installer:showManageProgramView(installedProgramName)
+function Installer:manageProgramView(installedProgramName)
     ui.clear()
 
     -- Get installed program info from config
@@ -2311,7 +2245,7 @@ function Installer:showManageProgramView(installedProgramName)
 
     -- Display program information
     local title = string.format("%s (%s)", registryProgram and registryProgram.title or installedProgramName,
-                                installedProgramName)
+        installedProgramName)
     ui.textBox(term.current(), self.boxSizing.mainPadding, 2, self.boxSizing.contentBox, 3, title, colors.cyan)
 
     ui.horizontalLine(term.current(), self.boxSizing.mainPadding, 4, term_width - 1, colors.gray)
@@ -2322,8 +2256,8 @@ function Installer:showManageProgramView(installedProgramName)
 
     -- Create scrollable area
     local scrollArea, _ = ui.scrollBox(term.current(), self.boxSizing.mainPadding, 6, self.boxSizing.contentBox, 11,
-                                       20 + (registryProgram and #registryProgram.dependencies * 2 or 0), true, true,
-                                       colors.white, colors.black)
+        20 + (registryProgram and #registryProgram.dependencies * 2 or 0), true, true,
+        colors.white, colors.black)
     -- Draw content in scroll area
     scrollArea.setBackgroundColor(colors.black)
     scrollArea.clear()
@@ -2331,6 +2265,8 @@ function Installer:showManageProgramView(installedProgramName)
     local function resetFg()
         scrollArea.setTextColor(colors.white)
     end
+
+    local headerColor = colors.cyan
 
     local cy = 1
     if registryProgram then
@@ -2354,7 +2290,7 @@ function Installer:showManageProgramView(installedProgramName)
         cy = cy + 2
 
         -- Description
-        scrollArea.setTextColor(colors.orange)
+        scrollArea.setTextColor(headerColor)
         scrollArea.setCursorPos(1, cy)
         scrollArea.write("Description:")
         cy = cy + 1
@@ -2380,7 +2316,7 @@ function Installer:showManageProgramView(installedProgramName)
         cy = cy + 1
 
         -- Dependencies
-        scrollArea.setTextColor(colors.orange)
+        scrollArea.setTextColor(headerColor)
         scrollArea.setCursorPos(1, cy)
         scrollArea.write("Dependencies:")
         cy = cy + 1
@@ -2390,7 +2326,7 @@ function Installer:showManageProgramView(installedProgramName)
                 local depName = regDep.name
                 local installedDepVersion = config.installedLib[depName] and config.installedLib[depName].version
                 local requiredAtInstall = installedProgram.dependencies[depName] and
-                                              installedProgram.dependencies[depName].version
+                    installedProgram.dependencies[depName].version
                 local currentlyRequired = regDep.version
 
                 scrollArea.setCursorPos(1, cy)
@@ -2402,33 +2338,25 @@ function Installer:showManageProgramView(installedProgramName)
                 scrollArea.write("  > Installed: ")
                 if installedDepVersion then
                     -- Color based on whether it matches what was required at install
-                    local matchesRequired = installedDepVersion == requiredAtInstall
-                    scrollArea.setTextColor(matchesRequired and colors.green or colors.yellow)
+                    local vc = VersionCompare.compare(installedDepVersion, requiredAtInstall)
+                    local matchesRequired = vc == 0
+                    scrollArea.setTextColor(matchesRequired and colors.green or vc == -1 and colors.lightGray or
+                    colors.yellow)
                     scrollArea.write("v" .. installedDepVersion)
                     if not matchesRequired then
-
-                        local vc = VersionCompare.compare(installedDepVersion, requiredAtInstall)
                         local warningColor = vc == -1 and colors.red or colors.yellow
 
                         scrollArea.setTextColor(warningColor)
                         cy = cy + 1
                         cy = writeWrappedText(scrollArea,
-                                              string.format("(installed program requires v%s)", requiredAtInstall), 2,
-                                              cy, self.boxSizing.contentBox - 4)
+                            string.format("(installed program requires v%s)", requiredAtInstall), 2,
+                            cy, self.boxSizing.contentBox - 4)
                     end
                 else
                     scrollArea.setTextColor(colors.red)
                     scrollArea.write("Not installed")
                 end
                 cy = cy + 1
-
-                -- Show if there's a newer version required by latest program version
-                if currentlyRequired ~= requiredAtInstall then
-                    scrollArea.setCursorPos(3, cy)
-                    scrollArea.setTextColor(colors.orange)
-                    scrollArea.write(string.format("Latest version requires: v%s", currentlyRequired))
-                    cy = cy + 1
-                end
 
                 scrollArea.setTextColor(colors.white)
             end
@@ -2444,7 +2372,7 @@ function Installer:showManageProgramView(installedProgramName)
         scrollArea.setTextColor(colors.lightGray)
         scrollArea.setCursorPos(1, cy)
         local text = string.format("Installed on %s",
-                                   os.date("%A, %b %d, %Y at %R", installedProgram.installedAt / 1000))
+            os.date("%A, %b %d, %Y at %R", installedProgram.installedAt / 1000))
         cy = writeWrappedText(scrollArea, text, 1, cy, self.boxSizing.contentBox - 4)
         cy = cy + 1
     else
@@ -2474,7 +2402,7 @@ function Installer:showManageProgramView(installedProgramName)
     end
 
     -- Action buttons below scroll area
-    local buttonY = 18 -- Position below scroll area
+    local buttonY = 18                              -- Position below scroll area
     local buttonX = self.boxSizing.mainPadding or 2 -- Initialize with fallback
 
     ui.horizontalLine(term.current(), buttonX, buttonY - 1, term_width - 1, colors.gray)
@@ -2490,58 +2418,59 @@ function Installer:showManageProgramView(installedProgramName)
 
     local _, action = ui.run()
 
+    if action == "back" then
+        return self.VIEW_RESULT.BACK
+    end
+
     -- Handle actions
-    if action == "update" then
-        return self:handleProgramUpdate(installedProgramName, registryProgram)
-    elseif action == "remove" then
-        local result = self:showYesNoDialogView({
+    if action == "remove" then
+        local _, selection = self:showView(self.yesNoDialogView, {
             title = "Confirm Uninstall",
             message = string.format("Are you sure you want to remove %s?", title),
             color = colors.red
         })
-        if result == "yes" then
-           
+        if selection == "yes" then
             local success = self:uninstallProgram(installedProgramName)
-
             if success then
                 self:showContinueDialogView({
                     title = "Success",
                     message = string.format("'%s' has been uninstalled.", installedProgramName),
                     color = colors.green
                 })
+                return self.VIEW_RESULT.BACK
             else
                 self:showContinueDialogView({
                     title = "Warning",
                     message = string.format("'%s' was unable to be uninstalled.", installedProgramName),
                     color = colors.yellow
                 })
+                return self.VIEW_RESULT.RETRY
             end
-
-            
-            return "remove"
         end
+        return self.VIEW_RESULT.RETRY
     end
 
     return action
 end
 
-function Installer:showUpdateLibrarySelectorView()
-    ui.clear()
-
+function Installer:updateLibrarySelectorView()
     local config = self:loadConfig()
 
     if not next(config.installedLib) then
         ui.textBox(term.current(), self.boxSizing.mainPadding, 2, self.boxSizing.contentBox, 3,
-                   "No libaries are currently installed.")
+            "No libaries are currently installed.")
 
         ui.button(term.current(), self.boxSizing.mainPadding, 6, "Back", "back")
 
-        ui.run()
-        return "back"
+        local _, action = ui.run()
+        if action == "back" then
+            return self.VIEW_RESULT.BACK
+        end
+        return self.VIEW_RESULT.RETRY
     end
 
     ui.textBox(term.current(), self.boxSizing.mainPadding, 2, self.boxSizing.contentBox, 3,
-               "Select a library to update:")
+        "Select a library to update:")
 
     -- Create entries for selection box
     local entries = {}
@@ -2550,31 +2479,37 @@ function Installer:showUpdateLibrarySelectorView()
     for name, info in pairs(config.installedLib) do
         table.insert(entries, name)
         table.insert(descriptions, string.format("Version: %s\nInstalled: %s", info.version,
-                                                 os.date("%Y-%m-%d %H:%M", info.installedAt / 1000)))
+            os.date("%Y-%m-%d %H:%M", info.installedAt / 1000)))
     end
 
     ui.borderBox(term.current(), self.boxSizing.mainPadding + 1, 6, self.boxSizing.borderBox, 8)
 
     local descriptionBox = ui.textBox(term.current(), self.boxSizing.mainPadding, 15, self.boxSizing.contentBox, 3,
-                                      descriptions[1])
+        descriptions[1])
 
     ui.selectionBox(term.current(), self.boxSizing.mainPadding + 1, 6, self.boxSizing.contentBox, 8, entries, "done",
-                    function(opt)
-        descriptionBox(descriptions[opt])
-    end)
+        function(opt)
+            descriptionBox(descriptions[opt])
+        end)
 
     self:drawBackButton()
 
     local _, action, selection = ui.run()
 
+    if action == "back" then
+        return self.VIEW_RESULT.BACK
+    end
+
+    if not selection then
+        return self.VIEW_RESULT.RETRY
+    end
+
     self.log.debug("Selected %s to manage program", selection)
 
-    return action, selection
+    return self.VIEW_RESULT.NEXT, selection
 end
 
-function Installer:showUpdateLibraryView(libName)
-    ui.clear()
-
+function Installer:updateLibraryView(libName)
     local config = self:loadConfig()
 
     local dep
@@ -2608,16 +2543,20 @@ function Installer:showUpdateLibraryView(libName)
     ui.borderBox(term.current(), 4, 7, 12, 1)
     ui.inputBox(term.current(), 4, 7, 12, "result")
 
-    local _, action, text = ui.run()
+    local _, action, userInput = ui.run()
 
-    if action == "result" and text and text ~= "" then
+    if action == "back" then
+        return self.VIEW_RESULT.BACK
+    end
 
-        local trimmedInput = text:gsub("^v", "") -- remove "v" prefix if exists
+    -- Handle user input from textbox
+    if action == "result" and userInput and userInput ~= "" then
+        local trimmedInput = userInput:gsub("^v", "") -- remove "v" prefix if exists
 
         -- Validate the text input to be a Semver version string
         if not util.isValidSemver(trimmedInput) then
             self:showErrorDialogView("'%s' is not a valid version input.", trimmedInput)
-            return nil
+            return self.VIEW_RESULT.RETRY
         end
 
         -- handle version update
@@ -2625,7 +2564,7 @@ function Installer:showUpdateLibraryView(libName)
 
         if not registry then
             self:showErrorDialogView("Could not get registry.json")
-            return "back"
+            return self.VIEW_RESULT.RETRY
         end
 
         local regDep
@@ -2644,24 +2583,22 @@ function Installer:showUpdateLibraryView(libName)
         local newDepVersion = trimmedInput
         regDep.version = newDepVersion
 
-        local success = self:installDependency(regDep)
+        local installSuccess = self:installDependency(regDep)
 
-        if not success then
-            if not registry then
-                self:showErrorDialogView(string.format("Failed to install %s (%s)", dep.name, newDepVersion))
-                return "back"
-            end
+        if not installSuccess then
+            self:showErrorDialogView(string.format("Failed to install %s (%s)", dep.name, newDepVersion))
+            return self.VIEW_RESULT.RETRY
         else
             self:showContinueDialogView({
                 title = "Success",
                 message = string.format("%s (%s) installed.", dep.name, newDepVersion),
                 color = colors.green
             })
-            return "done"
+            return self.VIEW_RESULT.NEXT
         end
     end
 
-    return action
+    return self.VIEW_RESULT.RETRY
 end
 
 function Installer:run(config)
@@ -2679,111 +2616,125 @@ function Installer:run(config)
     end
 
     local success, err = pcall(function()
-        local run = true
-        while run do
-            local _, _, selection = self:showMainMenuView()
+        while true do
+            local result, selection = self:showView(self.mainMenuView)
+
+            if result == self.VIEW_RESULT.EXIT then
+                break
+            end
 
             -- MAIN MENU > INSTALL PROGRAM
             if selection == self.MAIN_MENU.options.INSTALL_PROGRAM then
-                local registry = self:fetchRegistry()
-                if registry then
-                    local selectedProgram = self:showInstallProgramSelectorView(registry.programs)
-                    if selectedProgram then
-                        local success = false
-                        repeat
-                            local action = self:showConfirmInstallProgramView(selectedProgram)
-                            if action == "install" then
+                while true do
+                    local result, selectedProgram = self:showView(self.installProgramSelectorView)
+                    if result == self.VIEW_RESULT.BACK then
+                        break
+                    end
+                    if result == self.VIEW_RESULT.NEXT and selectedProgram then
+                        -- User selected a program to install...
+                        while true do
+                            local confirmResult = self:showView(self.confirmInstallProgramView, selectedProgram)
+
+                            if confirmResult == self.VIEW_RESULT.BACK then
+                                -- User cancelled, go back to selector
+                                break
+                            end
+
+                            if confirmResult == self.VIEW_RESULT.NEXT then
+                                -- User confirmed, attempt installation
                                 local installSuccess = self:installProgram(selectedProgram)
                                 if not installSuccess then
                                     self:showContinueDialogView({
                                         title = "Error",
-                                        message = string.format("'%s' v%s failed installation.", selectedProgram.title,
-                                                                selectedProgram.version),
+                                        message = string.format("'%s' v%s failed installation.",
+                                            selectedProgram.title,
+                                            selectedProgram.version),
                                         color = colors.red
                                     })
-                                    break
+                                else
+                                    -- Success install
+                                    self:showContinueDialogView({
+                                        title = "Success",
+                                        message = string.format("'%s' v%s has been installed successfully.",
+                                            selectedProgram.title, selectedProgram.version),
+                                        color = colors.green
+                                    })
                                 end
-                                self:showContinueDialogView({
-                                    title = "Success",
-                                    message = string.format("'%s' v%s has been installed successfully.",
-                                                            selectedProgram.title, selectedProgram.version),
-                                    color = colors.green
-                                })
-                                success = true
-                            elseif action == "back" or action == "cancel" then
+                                break -- go back to install program selector
+                            else
+                                -- return to install program selector
                                 break
                             end
-                        until success == true
-                    end
-                else
-                    if not registry then
-                        self:showContinueDialogView({
-                            title = "Error",
-                            message = "Could not get registry.json"
-                        })
+                            ::continue::
+                        end
                     end
                 end
                 -- MAIN MENU > MANAGE PROGRAMS
             elseif selection == self.MAIN_MENU.options.MANAGE_PROGRAMS then
-                local done = false
-                repeat
-                    local selectAction, selectedProgram = self:showManageProgramSelectorView()
-                    if selectAction == "back" then
-                        -- User clicked back from program selection screen - return to main menu
-                        done = true
-                    elseif selectedProgram then
-                        -- User selected a program - show program management view
-                        local programAction = self:showManageProgramView(selectedProgram)
+                while true do
+                    -- local result, selectedProgram = self:showView(function()
+                    --     return self:manageProgramSelectorView()
+                    -- end)
 
-                        if programAction == "back" then
-                            -- Just continue the loop to show program selector again
-                            self.log.debug("Returning to program selection from program view")
-                        else
-                            -- Handle other program management actions here
-                            -- For example: if programAction == "remove" then ...
-                        end
+                    local result, selectedProgram = self:showView(self.manageProgramSelectorView)
+
+                    if result == self.VIEW_RESULT.BACK then
+                        break
                     end
-                until done == true
+
+                    -- Show program management view
+                    local programResult = self:showView(self.manageProgramView, selectedProgram)
+                    if programResult == self.VIEW_RESULT.BACK then
+                        -- Continue loop to show selector again
+                    else
+                        -- Handle other results
+                        break
+                    end
+                end
                 -- MAIN MENU > UPDATE LIB
             elseif selection == self.MAIN_MENU.options.UPDATE_LIB then
-                local done = false
-                repeat
-                    local action, selection = self:showUpdateLibrarySelectorView()
-                    if action == "back" then
-                        done = true
-                    elseif action == "done" then
-                        if selection then
-                            self:showUpdateLibraryView(selection)
+                while true do
+                    local result, selection = self:showView(self.updateLibrarySelectorView)
+                    if result == self.VIEW_RESULT.BACK then
+                        break -- back to main menu
+                    elseif result == self.VIEW_RESULT.NEXT and selection then
+                        local updateResult = self:showView(self.updateLibraryView, selection)
+
+                        if updateResult == self.VIEW_RESULT.BACK then
+                            break
                         end
+                    else
+                        break -- back to main menu
                     end
-                until done == true
+                end
                 -- MAIN MENU > REMOVE ALL
             elseif selection == self.MAIN_MENU.options.REMOVE_ALL then
-                local result = self:showYesNoDialogView({
+                local _, selection = self:showView(self.yesNoDialogView, {
                     title = "Warning",
                     message = "Are you sure you want to delete all files?"
                 })
-                if result == "yes" then
-                    fs.delete(self.CONFIG_PATH)
-                    fs.delete(self.BASE_PATH)
+                    if selection == "yes" then
+                        fs.delete(self.CONFIG_PATH)
+                        fs.delete(self.BASE_PATH)
 
-                    self:showContinueDialogView({
-                        title = "Success",
-                        message = "All files have been deleted. Log restarted.",
-                        color = colors.green
-                    })
+                        self:showContinueDialogView({
+                            title = "Success",
+                            message = "All files have been deleted. Log restarted.",
+                            color = colors.green
+                        })
 
-                    self:closeLogger()
-                    self:initLogger()
-                end
+                        self:closeLogger()
+                        self:initLogger()
+                    end
             elseif selection == self.MAIN_MENU.options.EXIT then
-                run = false
                 break
             end
         end
     end)
 
     ui.clear()
+
+    print("Goodbye!\n")
 
     if not success then
         self.log.error("Installer crashed: %s", err)
@@ -2826,7 +2777,7 @@ end
 -- **************************************
 -- Command line run
 
-local args = {...}
+local args = { ... }
 
 local installConfig = {}
 
