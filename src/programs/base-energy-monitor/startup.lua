@@ -1,12 +1,12 @@
 -- startup.lua
 -- Monitor an energy storage
 
-require("/bng.common.bng-cc-core.initenv").init_env()
+require("bng-cc-core.initenv").init_env()
 
 local ppm = require("bng-cc-core.ppm")
 local util = require("bng-cc-core.util")
 
-local config = require("energy-monitor-jan-2025.config")
+local config = require("base-energy-monitor.config") 
 
 
 local coloredWrite = util.coloredWrite
