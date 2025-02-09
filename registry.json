@@ -1,23 +1,21 @@
 {
+    "programs_url": "https://raw.githubusercontent.com/bngarren/computer-craft/master/src/programs/",
     "programs": [
         {
             "name": "base-energy-monitor",
             "title": "Base Energy Monitoring System",
             "description": "Advanced monitoring for energy storage",
-            "version": "0.0.3",
+            "version": "0.0.4",
             "author": "bngarren",
             "license": "MIT",
             "files": [
                 {
-                    "url": "https://raw.githubusercontent.com/bngarren/computer-craft/master/src/programs/energy-monitor-jan-2025/startup.lua",
                     "path": "startup.lua"
                 },
                 {
-                    "url": "https://raw.githubusercontent.com/bngarren/computer-craft/master/src/programs/energy-monitor-jan-2025/config.lua",
                     "path": "config.lua"
                 },
                 {
-                    "url": "https://raw.githubusercontent.com/bngarren/computer-craft/master/src/programs/energy-monitor-jan-2025/test.lua",
                     "path": "test.lua"
                 }
             ],
