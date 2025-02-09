@@ -1362,6 +1362,125 @@ function Installer:fetchRegistry()
     return registry
 end
 
+---Validates a program entry from the registry
+---@param program table The program to validate
+---@return boolean success Whether the program is valid
+---@return string|nil error Error message if validation failed
+function Installer:validateRegistryProgram(program)
+    -- Required fields with their types
+    local required = {
+        name = "string",
+        title = "string",
+        version = "string",
+        files = "table"
+    }
+
+    -- Optional fields with their types
+    local optional = {
+        author = "string",
+        description = "string",
+        license = "string",
+        dependencies = "table"
+    }
+
+    -- Check required fields exist and are correct type
+    for field, expectedType in pairs(required) do
+        if not program[field] then
+            return false, string.format("Missing required field: %s", field)
+        end
+        if type(program[field]) ~= expectedType then
+            return false, string.format("Invalid type for %s: expected %s, got %s", 
+                field, expectedType, type(program[field]))
+        end
+    end
+
+    -- Check optional fields are correct type if they exist
+    for field, expectedType in pairs(optional) do
+        if program[field] and type(program[field]) ~= expectedType then
+            return false, string.format("Invalid type for %s: expected %s, got %s",
+                field, expectedType, type(program[field]))
+        end
+    end
+
+    -- Validate program name format (alphanumeric and hyphens only)
+    if not program.name:match("^[%w%-]+$") then
+        return false, "Program name must contain only letters, numbers, and hyphens"
+    end
+
+    -- Validate version format
+    if not util.isValidSemver(program.version) then
+        return false, string.format("Invalid version format: %s", program.version)
+    end
+
+    -- Validate files array
+    if #program.files == 0 then
+        return false, "Program must have at least one file"
+    end
+
+    for i, file in ipairs(program.files) do
+        if type(file) ~= "table" then
+            return false, string.format("Invalid file entry at index %d", i)
+        end
+        if type(file.path) ~= "string" then
+            return false, string.format("Missing or invalid path for file at index %d", i)
+        end
+        -- Validate file path (no leading slash, valid chars only)
+        if file.path:match("^/") or not file.path:match("^[%w%-_/.]+$") then
+            return false, string.format("Invalid file path format: %s", file.path)
+        end
+    end
+
+    -- Validate dependencies if they exist
+    if program.dependencies then
+        for i, dep in ipairs(program.dependencies) do
+            -- Check required dependency fields
+            if type(dep) ~= "table" then
+                return false, string.format("Invalid dependency entry at index %d", i)
+            end
+            if type(dep.name) ~= "string" then
+                return false, string.format("Missing or invalid name for dependency at index %d", i)
+            end
+            if type(dep.version) ~= "string" then
+                return false, string.format("Missing or invalid version for dependency at index %d", i)
+            end
+            if not util.isValidSemver(dep.version) then
+                return false, string.format("Invalid version format for dependency %s: %s", 
+                    dep.name, dep.version)
+            end
+
+            -- Validate source information
+            if type(dep.source) ~= "table" then
+                return false, string.format("Missing or invalid source for dependency %s", dep.name)
+            end
+            local source = dep.source
+            if type(source.type) ~= "string" then
+                return false, string.format("Missing source type for dependency %s", dep.name)
+            end
+            if source.type == "github-release" then
+                -- Validate GitHub release specific fields
+                if type(source.owner) ~= "string" or type(source.repo) ~= "string" then
+                    return false, string.format("Invalid GitHub source info for dependency %s", dep.name)
+                end
+                if type(source.files) ~= "table" or #source.files == 0 then
+                    return false, string.format("Missing source files for dependency %s", dep.name)
+                end
+                -- Validate each source file
+                for j, file in ipairs(source.files) do
+                    if type(file.source) ~= "string" or type(file.target) ~= "string" then
+                        return false, string.format("Invalid source file entry %d for dependency %s", 
+                            j, dep.name)
+                    end
+                end
+            else
+                return false, string.format("Unsupported source type '%s' for dependency %s", 
+                    source.type, dep.name)
+            end
+        end
+    end
+
+    return true
+end
+
 function Installer:writeFile(path, content)
     expect(1, path, "string")
     expect(2, content, "string")
@@ -1592,10 +1711,21 @@ function Installer:installProgram(program)
 
     -- Get url to install from
     local registry = self:fetchRegistry()
+    if not registry then
+        error("Could not get remote registry")
+    end
     local programsUrl = registry.programs_url
 
     if not programsUrl or programsUrl == "" then
         error("Could not get programs_url from registry")
+    end
+
+    local isValid, err = self:validateRegistryProgram(program)
+    if not isValid then
+        self:showContinueDialogView({title = "Warning", message = string.format("Registry error:\n%s", err)})
+        self.log.error("Registry error: %s", err)
+    else
+        self.log.debug("Registry entry for %s is valid!", program.name)
     end
 
     -- Create unique temp path for this installation
@@ -1704,6 +1834,7 @@ function Installer:installProgram(program)
         -- Prepare new config entry
         local newConfig = textutils.unserialize(textutils.serialize(originalConfig)) -- Deep copy
         newConfig.installedPrograms[program.name] = {
+            title = program.title,
             version = program.version,
             installedAt = os.epoch("utc"),
             dependencies = {}
@@ -2089,6 +2220,9 @@ function Installer:installProgramSelectorView()
     end
     local programs = registry.programs
 
+    local config = self:loadConfig()
+    local installedPrograms = config.installedPrograms
+
     ui.textBox(term.current(), self.boxSizing.mainPadding, 2, self.boxSizing.contentBox, 3,
         "Select a program to install:")
 
@@ -2099,7 +2233,11 @@ function Installer:installProgramSelectorView()
     local descriptions = {}
 
     for _, program in ipairs(programs) do
-        local desc = program.description or "No description available"
+        local desc = util.truncateText(program.description, 15) or "No description available"
+
+        if installedPrograms[program.name] then
+            desc = desc .. "\n\n(installed)"
+        end
 
         table.insert(entries, program.title .. " v" .. program.version)
         table.insert(descriptions, desc)
@@ -2182,7 +2320,7 @@ function Installer:manageProgramSelectorView()
     local descriptions = {}
 
     for name, info in pairs(config.installedPrograms) do
-        table.insert(entries, name)
+        table.insert(entries, info.title or name)
         table.insert(descriptions, string.format("Version: %s\nInstalled: %s", info.version,
             os.date("%Y-%m-%d %H:%M", info.installedAt / 1000)))
     end
@@ -2298,21 +2436,7 @@ function Installer:manageProgramView(installedProgramName)
         scrollArea.setCursorPos(1, cy)
         local description = registryProgram.description or "No description available"
 
-        -- Split into words and truncate
-        local words = {}
-        for word in description:gmatch("%S+") do
-            table.insert(words, word)
-            if #words >= 20 then
-                break
-            end
-        end
-
-        -- Add ellipsis if we truncated
-        local truncatedDesc = table.concat(words, " ")
-        if #words == 20 and description:match("%S+", truncatedDesc:len() + 1) then
-            truncatedDesc = truncatedDesc .. "..."
-        end
-        cy = writeWrappedText(scrollArea, truncatedDesc, 1, cy, self.boxSizing.contentBox - 4)
+        cy = writeWrappedText(scrollArea, util.truncateText(description, 20), 1, cy, self.boxSizing.contentBox - 4)
         cy = cy + 1
 
         -- Dependencies
@@ -2338,10 +2462,10 @@ function Installer:manageProgramView(installedProgramName)
                 scrollArea.write("  > Installed: ")
                 if installedDepVersion then
                     -- Color based on whether it matches what was required at install
-                    local vc = VersionCompare.compare(installedDepVersion, requiredAtInstall)
+                    local vc = self.compareVersions(installedDepVersion, requiredAtInstall)
                     local matchesRequired = vc == 0
                     scrollArea.setTextColor(matchesRequired and colors.green or vc == -1 and colors.lightGray or
-                    colors.yellow)
+                        colors.yellow)
                     scrollArea.write("v" .. installedDepVersion)
                     if not matchesRequired then
                         local warningColor = vc == -1 and colors.red or colors.yellow
@@ -2713,19 +2837,19 @@ function Installer:run(config)
                     title = "Warning",
                     message = "Are you sure you want to delete all files?"
                 })
-                    if selection == "yes" then
-                        fs.delete(self.CONFIG_PATH)
-                        fs.delete(self.BASE_PATH)
+                if selection == "yes" then
+                    fs.delete(self.CONFIG_PATH)
+                    fs.delete(self.BASE_PATH)
 
-                        self:showContinueDialogView({
-                            title = "Success",
-                            message = "All files have been deleted. Log restarted.",
-                            color = colors.green
-                        })
+                    self:showContinueDialogView({
+                        title = "Success",
+                        message = "All files have been deleted. Log restarted.",
+                        color = colors.green
+                    })
 
-                        self:closeLogger()
-                        self:initLogger()
-                    end
+                    self:closeLogger()
+                    self:initLogger()
+                end
             elseif selection == self.MAIN_MENU.options.EXIT then
                 break
             end
@@ -2772,6 +2896,23 @@ function util.isValidSemver(version)
     end
 
     return true
+end
+
+function util.truncateText(text, maxWords)
+    -- Split into words and truncate
+    local words = {}
+    for word in text:gmatch("%S+") do
+        table.insert(words, word)
+        if #words >= maxWords then
+            break
+        end
+    end
+    -- Add ellipsis if we truncated
+    local truncatedText = table.concat(words, " ")
+    if #words == maxWords and text:match("%S+", truncatedText:len() + 1) then
+        truncatedText = truncatedText .. "..."
+    end
+    return truncatedText
 end
 
 -- **************************************
