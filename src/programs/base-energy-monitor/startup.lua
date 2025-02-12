@@ -5,8 +5,13 @@
 local core = require("/bng.lib.bng-cc-core.bng-cc-core")
 core.initenv.run()
 
+-- Build logger and attach to core.log for non-global access
+local LoggerBuilder = core.logger_builder
+core.log = LoggerBuilder.new()
+    :build()
+local log = core.log
+
 -- Load libs
-local LoggerBuilder = core.log
 local ppm = core.ppm
 local util = core.util
 
@@ -14,9 +19,6 @@ local util = core.util
 local config = require("base-energy-monitor.config") 
 
 
--- init log
-local log = LoggerBuilder.new()
-    :build()
 
 local coloredWrite = util.coloredWrite
 

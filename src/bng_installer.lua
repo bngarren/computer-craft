@@ -2318,9 +2318,12 @@ function Installer:manageProgramSelectorView()
     -- Create entries for selection box
     local entries = {}
     local descriptions = {}
+    local name_to_title_table = {}
 
     for name, info in pairs(config.installedPrograms) do
-        table.insert(entries, info.title or name)
+        local title = info.title or name
+        table.insert(entries, title)
+        name_to_title_table[title] = name
         table.insert(descriptions, string.format("Version: %s\nInstalled: %s", info.version,
             os.date("%Y-%m-%d %H:%M", info.installedAt / 1000)))
     end
@@ -2345,7 +2348,7 @@ function Installer:manageProgramSelectorView()
 
     if action == "done" and selection then
         self.log.debug("Selected %s to manage program", selection)
-        return self.VIEW_RESULT.NEXT, selection
+        return self.VIEW_RESULT.NEXT, name_to_title_table[selection]
     end
 
     -- If we get here, no valid selection was made
