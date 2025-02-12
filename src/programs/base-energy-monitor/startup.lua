@@ -3,15 +3,14 @@
 
 -- Load bng-cc-core and init the package env -- *Must come before any other lib requires*
 local core = require("/bng.lib.bng-cc-core.bng-cc-core")
+-- Fixes package.path to allow easier requiring of lib modules
 core.initenv.run()
 
--- Build logger and attach to core.log for non-global access
-local LoggerBuilder = core.logger_builder
-core.log = LoggerBuilder.new()
+-- Build logger singleton
+local log = core.log.Builder.new()
     :with_level("trace")
     :with_monitor_output("top")
     :build()
-local log = core.log
 
 -- Load libs
 local ppm = core.ppm
