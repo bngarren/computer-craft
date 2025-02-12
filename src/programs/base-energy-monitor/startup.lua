@@ -8,6 +8,8 @@ core.initenv.run()
 -- Build logger and attach to core.log for non-global access
 local LoggerBuilder = core.logger_builder
 core.log = LoggerBuilder.new()
+    :with_level("trace")
+    :with_monitor_output("top")
     :build()
 local log = core.log
 
@@ -18,10 +20,8 @@ local util = core.util
 -- Program files
 local config = require("base-energy-monitor.config") 
 
-log:info("Loaded!")
+log:info("startup.lua initialized!")
 
-
-local coloredWrite = util.coloredWrite
 
 
 -- Mount peripherals
@@ -41,8 +41,7 @@ local function monitor_energy()
 
             local percentFill = util.round(currentEnergy / maxEnergy * 100, -2)
 
-            print(energyStorageMain.name .. " has energy level: " .. currentEnergy .. " / " .. maxEnergy)
-            print(percentFill .. "%")
+            log:info("%s has energy level: %s/%s (%s%%)", energyStorageMain.name, currentEnergy, maxEnergy, percentFill)
 
             -- Redstone control logic
             if percentFill >= config.threshold_high then
