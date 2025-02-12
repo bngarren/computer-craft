@@ -18,6 +18,7 @@ local util = core.util
 -- Program files
 local config = require("base-energy-monitor.config") 
 
+log:info("Loaded!")
 
 
 local coloredWrite = util.coloredWrite

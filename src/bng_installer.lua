@@ -2575,6 +2575,18 @@ function Installer:manageProgramView(installedProgramName)
             end
         end
         return self.VIEW_RESULT.RETRY
+    elseif action =="update" then
+        local installSuccess = self:installProgram(registryProgram)
+        if installSuccess then
+            self:showContinueDialogView({
+                title = "Success",
+                message = string.format("'%s' was successfully updated to v%s.", registryProgram.title, registryProgram.version),
+                color = colors.green
+            })
+        else
+            self:showErrorDialogView("'%s' could not be updated to v%s.", registryProgram.title)
+        end
+        return self.VIEW_RESULT.RETRY
     end
 
     return action
