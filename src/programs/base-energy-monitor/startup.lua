@@ -13,6 +13,14 @@ local util = core.util
 local core_error = core.error
 
 local log = core.log.get()
+log:configure({
+    level = "trace",
+    outputs = {
+        term = true,
+        file = true,
+        monitors = {"top"}
+    }
+})
 
 -- Program files
 local config = require("base-energy-monitor.config") 
@@ -57,7 +65,7 @@ local function monitor_energy()
     end
 end
 
-if not xpcall(monitor_energy, core_error.crash_handle) then
+if not xpcall(monitor_energy, core_error.crash_handler) then
     core_error.crash_exit()
 else
     -- Graceful closures
