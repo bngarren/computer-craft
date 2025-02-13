@@ -6,15 +6,13 @@ local core = require("/bng.lib.bng-cc-core.bng-cc-core")
 -- Fixes package.path to allow easier requiring of lib modules
 core.initenv.run()
 
--- Build logger singleton
-local log = core.log.Builder.new()
-    :with_level("trace")
-    :with_monitor_output("top")
-    :build()
 
 -- Load libs
 local ppm = core.ppm
 local util = core.util
+local core_error = core.error
+
+local log = core.log.get()
 
 -- Program files
 local config = require("base-energy-monitor.config") 
@@ -59,5 +57,8 @@ local function monitor_energy()
     end
 end
 
-
-monitor_energy()
+if not xpcall(monitor_energy, core_error.crash_handle) then
+    core_error.crash_exit()
+else
+    -- Graceful closures
+end
