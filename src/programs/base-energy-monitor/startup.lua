@@ -69,4 +69,5 @@ if not xpcall(monitor_energy, core_error.crash_handler) then
     core_error.crash_exit()
 else
     -- Graceful closures
+    log:close()
 end
