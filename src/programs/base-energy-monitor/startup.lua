@@ -12,15 +12,21 @@ local ppm = core.ppm
 local util = core.util
 local core_error = core.error
 
-local log = core.log.get()
-log:configure({
+-- Init application log (singleton)
+local parent_log = core.log.get()
+parent_log:configure({
     level = "trace",
     outputs = {
         term = true,
         file = true,
         monitors = {"top"}
+    },
+    file = {
+        write_banner = true
     }
 })
+-- Init local log
+local log = parent_log:child({component = "main"})
 
 -- Program files
 local config = require("base-energy-monitor.config") 
