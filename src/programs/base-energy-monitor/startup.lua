@@ -34,7 +34,6 @@ local config = require("base-energy-monitor.config")
 log:info("startup.lua initialized!")
 
 
-
 -- Mount peripherals
 ppm.mount_all()
 
