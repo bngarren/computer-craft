@@ -5,7 +5,7 @@
             "name": "base-energy-monitor",
             "title": "Base Energy Monitoring System",
             "description": "Advanced monitoring for energy storage",
-            "version": "0.0.11",
+            "version": "0.0.12",
             "author": "bngarren",
             "license": "MIT",
             "files": [
@@ -22,7 +22,7 @@
             "dependencies": [
                 {
                     "name": "bng-cc-core",
-                    "version": "0.0.22",
+                    "version": "0.0.23",
                     "source": {
                         "type": "github-release",
                         "owner": "bngarren",
@@ -64,7 +64,7 @@
             "name": "test-server",
             "title": "BNG Test Server",
             "description": "Server used to test networking system",
-            "version": "0.0.1",
+            "version": "0.0.2",
             "author": "bngarren",
             "license": "MIT",
             "files": [
@@ -75,7 +75,7 @@
             "dependencies": [
                 {
                     "name": "bng-cc-core",
-                    "version": "0.0.22",
+                    "version": "0.0.23",
                     "source": {
                         "type": "github-release",
                         "owner": "bngarren",
