@@ -5,7 +5,7 @@
             "name": "base-energy-monitor",
             "title": "Base Energy Monitoring System",
             "description": "Advanced monitoring for energy storage",
-            "version": "0.0.10",
+            "version": "0.0.11",
             "author": "bngarren",
             "license": "MIT",
             "files": [
@@ -22,7 +22,7 @@
             "dependencies": [
                 {
                     "name": "bng-cc-core",
-                    "version": "0.0.21",
+                    "version": "0.0.22",
                     "source": {
                         "type": "github-release",
                         "owner": "bngarren",
@@ -31,6 +31,63 @@
                             {
                                 "source": "bng-cc-core.min.lua",
                                 "target": "bng-cc-core.lua"
+                            },
+                            {
+                                "source": "vendor.min.lua",
+                                "target": "vendor.lua"
+                            }
+                        ]
+                    }
+                },
+                {
+                    "name": "telem",
+                    "version": "0.8.1",
+                    "source": {
+                        "type": "github-release",
+                        "owner": "cyberbit",
+                        "repo": "telem",
+                        "files": [
+                            {
+                                "source": "telem.min.lua",
+                                "target": "telem.lua"
+                            },
+                            {
+                                "source": "vendor.min.lua",
+                                "target": "vendor.lua"
+                            }
+                        ]
+                    }
+                }
+            ]
+        },
+        {
+            "name": "test-server",
+            "title": "BNG Test Server",
+            "description": "Server used to test networking system",
+            "version": "0.0.1",
+            "author": "bngarren",
+            "license": "MIT",
+            "files": [
+                {
+                    "path": "startup.lua"
+                }
+            ],
+            "dependencies": [
+                {
+                    "name": "bng-cc-core",
+                    "version": "0.0.22",
+                    "source": {
+                        "type": "github-release",
+                        "owner": "bngarren",
+                        "repo": "bng-cc-core",
+                        "files": [
+                            {
+                                "source": "bng-cc-core.min.lua",
+                                "target": "bng-cc-core.lua"
+                            },
+                            {
+                                "source": "vendor.min.lua",
+                                "target": "vendor.lua"
                             }
                         ]
                     }
